@@ -1,60 +1,54 @@
-# 11. Источники, актуальность и граница решений
+# 11. Источники, принятые правила и baseline решений
 
-**Перспектива:** на чём основан этот комплект и как не превратить устаревшие примеры в ложные архитектурные требования.
+## 1. На чём основана документация
 
-## 1. Что было предоставлено
+- Исходный архив пользователя `AI_Incident_Investigator_API_Contracts(1).zip` — `v0.2-draft` с продуктом, моделями, кандидатами OpenAPI, JSON Schema и MCP каталогом.
+- Более поздние командные уточнения: **нет RabbitMQ между Main и AI**, отдельный AI Backend на LangGraph, обязательный email OTP при каждом входе, human-reviewed RCA, G01 barrier и story-scoped Quality Gate.
+- Репозитории организации: `frontend` (React/TS), `ai_agent` (FastAPI/LangGraph/llama.cpp), `infra` (k3d, Loki, Prometheus, Tempo, Alloy), отдельный `auth`.
+- Макеты Figma B и наши предыдущие проекты задач — основание для конкретизации экранов и рабочих этапов.
 
-Основной источник этого комплекта — пользовательский архив **`AI_Incident_Investigator_API_Contracts(1).zip`**, который содержит пакет `AI_Incident_Investigator_API_Contracts_v0_2_EMAIL_OTP`:
+## 2. Статусы сведений — не смешивать
 
-- `00_README.md` — карта файлов и статус v0.2 draft.
-- `00_PROJECT_OVERVIEW (1).md` — общее назначение, цели и прежние требования.
-- `01_ARCHITECTURE.md`, `03_DOMAIN_MODELS.md`, `04_FRONTEND_API_AND_WS.md`, `05_INTERNAL_BACKEND_AI.md`, `06_MCP_CONTRACTS.md`, `08_SECURITY_AND_ERRORS.md` — логические границы, модели и сценарии.
-- `07_INGESTION.md`, `12_AUTH_EMAIL_OTP.md` — алерты, deployment, обязательный OTP.
-- `09_IMPLEMENTATION_PLAN.md`, `10_OPEN_DECISIONS.md`, `13_BACKEND_READINESS_AUDIT.md` — очерёдность, расхождения и готовность контрактов.
-- `openapi/`, `schemas/`, `mcp/tool-catalog.json`, `examples/` — **черновые machine-readable контракты**.
+| Вид | Значение |
+|---|---|
+| **Подтверждено исходным контекстом** | продукт, домен Incident/Investigation/Evidence/Review, No Rabbit, single ReAct, read-only, email OTP |
+| **Проверено на уровне кода/репозитория** | Qwen локально и одноузловой LangGraph smoke AI-01; k3d манифесты инфры; стартовый React каркас |
+| **Выбранный baseline v2** | REST Main↔AI, AI-owned MCP, Loki log adapter, service JWT, refresh HttpOnly cookie, ephemeral WS cookie ticket, AI busy 429, DB dispatch/outbox |
+| **Не реализовано или не подтверждено** | полный MCP→RCA→Main→Frontend live E2E, PG durable run recovery, реальный продуктовый production релиз |
 
-Дополнительно учтены **ранее разработанные в проекте** Figma B UI specs, frontend/AI task packs, актуальный код/конфигурации в GitHub организации `AI-Incident-Investigation-Platform` и пользовательские уточнения по G01/Quality Gate.
+## 3. Зафиксированные проектные решения для единой реализации
 
-## 2. Три типа утверждений в этом комплекте
-
-| Тип | Что означает | Пример |
+| ID | Решение | Где проверяется |
 |---|---|---|
-| **Согласованная продуктовая граница** | требование из более поздних договорённостей или стабильная часть v0.2 | отдельные Main/AI Backend, no RabbitMQ между ними, read-only AI, OTP каждый login |
-| **Проектное поведение** | как целевая функция должна работать; ещё требуется код и тест | Agent получает Evidence и формирует RCA; UI replay events |
-| **Предложение/кандидат** | нельзя выдавать за подписанный v1 contract | REST против gRPC на internal boundary; размещение MCP Server, overload policy |
+| V2-01 | Browser только к Main `/api/v1` и `/ws/v1/events` | 04, 12 |
+| V2-02 | Main↔AI REST/JSON прямой без RabbitMQ | 05, 06, 12 |
+| V2-03 | AI — один LangGraph ReAct, Qwen через llama.cpp, read-only | 06 |
+| V2-04 | MCP Server — отдельный внутренний read-only сервис AI workstream | 06, 08 |
+| V2-05 | Source logs = Loki, metrics = Prometheus, traces = Tempo | 06, 08 |
+| V2-06 | Main PG для Incident/Evidence/RCA/Review, AI PG для checkpoints/registry | 05, 06 |
+| V2-07 | OTP при каждом новом password login, refresh HttpOnly cookie | 04, 12 |
+| V2-08 | WS auth через 30-секундный HttpOnly cookie ticket + Origin check | 04, 12 |
+| V2-09 | AI busy отвечает 429; Main pending dispatcher retries boundedly | 05, 12 |
+| V2-10 | Result callback + GET readback, terminal WS только после DB commit | 05, 06, 12 |
+| V2-11 | 20 agent steps / 40 tool calls / 1200sec, один active executor | 06 |
+| V2-12 | Этапы AI: AI-01–09 → G01 → AI-10…; RAG P2 | 06, 14 |
 
-## 3. Приоритет актуальных сведений
+**Управление изменениями:** это **предложенный инженерный baseline, а не утверждение согласия всей команды**. На ревью необходимо принять его как единый стандарт и перенести в OpenAPI/Schema. После принятия задачи Codex обязаны ссылаться на него, а старый v0.2-draft не должен перекрывать обновлённые правила. Изменения baseline требуют ADR и совместного contract PR.
 
-1. **Согласованные более поздние решения команды** — например, отсутствие RabbitMQ между Main Backend и AI Backend, обязательность email OTP, G01 gate.
-2. **Работающий код и инфраструктура** — показатель фактически реализованного, но не заменяет утверждение требуемой функциональности.
-3. **`v0.2-draft` schemas/OpenAPI** — основа реализации/контрактных тестов, но статус «draft» нельзя скрывать.
-4. **Ранний `00_PROJECT_OVERVIEW` и legacy specs** — ценный продуктовый контекст, но их устаревшие технологические схемы не являются истиной.
+## 4. Где старая документация конфликтует с baseline
 
-## 4. Устаревшие места исходного комплекта
+| Старый пункт | Новая норма |
+|---|---|
+| Internal REST vs gRPC candidate | один REST transport, без второго независимого gRPC API |
+| Elasticsearch `/search_logs` | Loki LogQL-backed `search_logs`, новый MCP input/output schema |
+| Browser JWT refresh в JSON | refresh только через HttpOnly cookie, access in memory |
+| WS auth не выбран | одноразовый ticket cookie с проверкой Origin |
+| MCP Server owner TBD | один владелец реализации на AI workstream; infra sources у Даниила |
+| AI 202 background task | только после durable admission, separate executor/registry |
+| RabbitMQ between Backend and AI | removed; RabbitMQ допустим только как fault/demo subsystem |
 
-| Старый источник | В чём конфликт | Как читать сейчас |
-|---|---|---|
-| `00_PROJECT_OVERVIEW (1).md` | Backend → RabbitMQ → AI Worker | **заменено** прямым Main Backend ↔ AI Backend без RabbitMQ |
-| `00_PROJECT_OVERVIEW (1).md` | Infra через Docker Compose, Elasticsearch | в текущем repo `infra` — k3d/Kubernetes и Loki/Prometheus/Tempo/Alloy |
-| Ранний AI Worker | просто consumer | сейчас нужен самостоятельный AI Backend с LangGraph runtime |
-| `05_INTERNAL_BACKEND_AI.md` | REST и gRPC как кандидаты | не выдавать ни один за подписанный контракт без решения команды |
-| Раннее размещение MCP | «обязательно внутри Backend» | физический владелец/место — зона соглашения; функции read-only стабильны |
-| `openapi/`, `schemas/` | отдельные candidate endpoints и поля | использовать с учётом актуального ADR/contract sync |
+## 5. Что необходимо синхронизировать до codegen
 
-## 5. Степень определённости и честность
+`openapi/main-backend.openapi.yaml`, `openapi/ai-backend-rest-candidate.openapi.yaml` (переименовать после принятия), `schemas/domain.schema.json`, `schemas/ai-events.schema.json`, `schemas/ai-result-callback.schema.json`, `schemas/websocket.schema.json`, `mcp/tool-catalog.json`, `schemas/mcp-results.schema.json`, example fixtures. Нельзя считать эти старые файлы соответствующими v2 только из-за этой Markdown-редакции.
 
-**Чётко описано, что является продуктом:** цели, роли, Incident/Investigation, live events, Evidence, RCA, review, read-only диагностика, базовые экраны и общие обязанности сервисов. Эти факты составляют основное содержание данного комплекта.
-
-**Не утверждается, что вся инженерная конфигурация уже заморожена:** транспорт Main↔AI, физический owner MCP Server, политика загрузки executor, service identity, retention, отдельные provider-specific schemas и некоторые auth details. Изначальный архив прямо отмечает эти решения как открытые. Слова «сделать всё окончательно» сами по себе не являются подтверждением, что команда их согласовала.
-
-**Если задача требует конкретной реализации до утверждения:** использовать согласованный **локальный baseline/ADR** с явной пометкой статуса, а не молча объявлять его общекомандным v1. Для product/UX анализа допустимо пользоваться логическими границами независимо от wire-транспорта.
-
-## 6. Где лежат машинные контракты
-
-Этот пакет **не содержит конкурирующих OpenAPI/JSON Schema**. Их следует брать из исходного архива и обновлять синхронно при принятии технических решений. В частности, adapter `search_logs` для Loki, если он утверждён, требует отдельного схемного/контрактного изменения.
-
-## 7. Минимальные инструкции для Codex
-
-> Прочитай `README.md`, затем **только свой профильный документ** и относящийся к задаче актуальный OpenAPI/Schema. Не надо читать все перспективы разом. Не превращай концептуальные описания в новые API-эндпоинты, если они отсутствуют в контракте. Перед правками проверь код и проектные решения; не считай P1/P2 реализованными. Не меняй самостоятельно решения с пометкой candidate/draft. По окончании верни изменённые файлы, реально выполненные проверки и неразрешённые расхождения.
-
-[Вернуться к README](README.md).
+Для реализации команды сначала согласовывают §12, затем выполняют PR по схемам и контрактным тестам. Готовый пакет перспективы продукта (`00–03`, `07`, `10`) остаётся полезным и сохраняется без переписывания продуктовых намерений.

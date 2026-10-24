@@ -1,71 +1,140 @@
-# 04. Frontend — ответственность клиентского приложения
+# 04. Frontend — техническая спецификация React-приложения
 
-**Перспектива:** техническая роль Frontend в продукте.  
-**Владелец:** Расул. **Стек каркаса:** React + TypeScript + Vite + React Router; дизайн — Figma B.
+**Владелец:** Расул. **Репозиторий:** `AI-Incident-Investigation-Platform/frontend`. **Стек:** React, TypeScript, Vite, React Router; типизированный HTTP client, React Query (TanStack Query), Zustand только для клиентского UI/session state, CSS с проектными токенами; тесты Vitest + Testing Library, E2E Playwright. **Статус:** целевая реализация. Наличие UI-макетов не доказывает работу API.
 
-## 1. Что Frontend делает
+> **Обязательный соседний документ:** [12_INTERSERVICE_CONTRACTS.md](12_INTERSERVICE_CONTRACTS.md). Экраны и UX — [03_UI_UX.md](03_UI_UX.md). Это главный документ Расула: он должен позволять начать реализацию без копирования логики AI или Backend.
 
-Frontend — **интерфейс управления и просмотра**, а не исполнитель диагностики. Он запрашивает данные у Main Backend, показывает состояние расследования, обрабатывает пользовательские действия и отображает realtime-события. В браузере нет LLM, SQL, MCP-клиента или доступа к приватным Grafana/GitHub service credentials.
+## 1. Результат и границы
 
-## 2. Публичные границы
+Браузер умеет: вход с OTP, выбрать доступные project/environment, увидеть incidents, открыть отдельный Incident, запустить investigation, наблюдать события по WS, отменить/повторить run, просмотреть Evidence/Hypotheses/Timeline/RCA, оставить review. Браузер **не** знает пароли источников, не вызывает llama.cpp/MCP, не обращается к БД. Никаких конфигураций внутренних service tokens в `.env` Frontend.
 
-```text
-Browser
- ├── REST /api/v1/...    → Main Backend
- └── WebSocket /ws/v1/events → Main Backend
-
-Browser  ✗  AI Backend / llama-server / MCP / PostgreSQL / Docker socket
+```
+Browser → HTTPS /api/v1/* → Main Backend → AI Backend
+        ↘ wss /ws/v1/events → Main Backend (persisted events)
 ```
 
-Никакой прямой browser→AI интеграции. Все проверки прав — на Main Backend; UI guard нужен только для UX.
+## 2. Карта страниц и маршрутов
 
-## 3. Какие области состояния существуют
+| Route (пример стабильного client routing) | Экран | Основные серверные данные | P |
+|---|---|---|---|
+| `/login` | Email/password | auth/login, 202 challenge | P0 |
+| `/verify-email` | Шесть цифр OTP | otp/verify, otp/resend | P0 |
+| `/overview` | Dashboard | GET overview, incidents | P0 |
+| `/incidents` | Incident registry | GET incidents filter/cursor | P0 |
+| `/incidents/:incidentId` | Incident Detail | GET incident, runs, timeline, reviews | P0 |
+| `/incidents/:incidentId?tab=live&run=:runId` | Live detail | GET investigation/events + WS | P0 |
+| `/investigations` | Live investigations | GET investigations, selected run | P0 |
+| `/integrations` | Source connections | GET integrations, test | P0 basic |
+| `/service-map` | Service graph | topology + health | P1 |
+| `/observability` | Logs & metrics | bounded telemetry REST queries | P1 |
+| `/traces` | Trace explorer | list and trace details | P1 |
+| `/settings` | Settings & users | GET users/me; admin API | P1 |
 
-| State | Пример | Правило |
+Nine initial Figma B screens plus independent Login/OTP. UI может показывать P1 экраны как read-only mocked preview во время разработки **только** с заметной маркировкой demo; нельзя выдавать mocks за реальные данные API.
+
+## 3. Предлагаемая структура `src/`
+
+```text
+src/
+  app/                  # router, protected route, providers, error boundaries
+  shared/
+    api/client.ts       # fetch/axios wrapper, Request-ID, auth, typed errors
+    api/generated/      # generated types from approved public OpenAPI
+    auth/session.ts     # in-memory access, token refresh single-flight
+    realtime/ws.ts      # ticket, socket, heartbeat, reconnect
+    ui/                 # primitives: table, badge, modal, tabs, skeleton
+    lib/                # format UTC/timezone, URL validation, access helpers
+  features/
+    auth/               # Login/OTP/renew/Logout
+    scope/              # project/environment/service selectors
+    incidents/          # list, detail, status, selectors
+    investigations/     # start/cancel/retry, timeline state, run reducer
+    evidence/           # cards/source links
+    rca/                # structured report and human review
+    integrations/       # admin sources
+  pages/                 # assembled route screens, minimal data logic
+  styles/                # tokens and dark theme
+  test/                  # msw fixtures, test utils
+```
+
+Использовать уже существующий `src/` и его стиль — не переписывать структуру без необходимости. Фичи имеют собственные `api.ts`, `queries.ts`, `types.ts`, `components/`. Server state через TanStack Query; Zustand только для фильтров, активной вкладки, ephemeral auth и WS status. **Не дублировать полный Incident object одновременно в Zustand и Query.**
+
+## 4. HTTP SDK и обработка сессии
+
+`apiClient` обязан: добавлять `Authorization: Bearer <access_token>` для защищённых методов, сохранять `X-Request-ID`, указывать `credentials: include` **только** для cookie auth paths, разбивать ошибки по `error.code`, отменять запрос через `AbortSignal`, не повторять автоматически неидемпотентные POST. Обработка refresh: одна `refreshPromise` на все конкурентные 401; после неудачного refresh очищать in-memory access и возвращать `/login`; повторять исходный GET/безопасный запрос один раз. Не хранить refresh в localStorage/sessionStorage.
+
+**OTP flow:** после `POST login` показывать masked email и таймер resend; на response 202 **не** открывать продукт. OTP вводить строкой (ведущий ноль возможен); 410 → новый вход, 429 → cooldown из `Retry-After`, 401 → сообщение без раскрытия лишних данных. Refresh страницы на `/verify-email`: challenge ID хранить только в session state или предлагать повторный login, password/OTP никогда не сохранять.
+
+**WS:** после авторизации взять одноразовый ticket по `POST /auth/ws-ticket`, подключить `wss://.../ws/v1/events` (по утверждённому способу передачи ticket), проверить ack. Не класть длинный JWT в URL.
+
+## 5. React Query: ключи, cache и invalidation
+
+| Ресурс | Query key | Правило |
 |---|---|---|
-| Session/User | role, allowed projects, email OTP state | авторизация отделена от UI |
-| Selection | project, environment, service, time range | может отражаться в URL |
-| Incidents list | фильтры, cursor, sort | серверная пагинация, не локальная фильтрация неполных данных |
-| Incident detail | поля Incident, latest run | Incident/Investigation не смешивать |
-| Investigation | status, budgets, selected run | история попыток, новый ID при Retry |
-| Investigation events | sequence, event_id, timestamp | dedup/replay при WS reconnect |
-| Evidence / RCA | гипотезы, доказательства, обзор | ссылаться только на данные Backend |
-| Integrations | соединение, masked config, test | секрет не возвращается в браузер |
+| me | `['me']` | invalidate на login/logout/role change |
+| projects | `['projects']` | cache внутри session |
+| incident list | `['incidents', projectId, envId, filters, cursor]` | server pagination, сохранить visible page при loading |
+| incident | `['incident', id]` | актуализировать при event/scope action |
+| run | `['investigation', id]` | invalidate on event/status and cancel |
+| events | `['investigation-events', id]` | ordered merge by sequence, independent of sort UI |
+| evidence | `['evidence', investigationId]` | invalidate after persisted evidence event or report arrival |
+| report | `['report', investigationId]` | no report → explicit empty, не интерпретировать 404 как глобальный API failure |
 
-## 4. Realtime без потерь
+При смене project ID сбрасывать предыдущие scoped данные, active subscriptions и selection. Не допускать всплытия данных другого проекта из кэша. Logout → close WS, clear caches.
 
-1. `GET` текущей Investigation и истории events.
-2. WebSocket connect + subscribe с `after_sequence` последнего применённого события.
-3. Для каждого event проверить `investigation_id`, `sequence`, `event_id`.
-4. При переподключении повторить REST backfill; одинаковые события применить один раз.
-5. Если обнаружен разрыв последовательности — не «перепрыгивать» его, а повторно запросить историю.
-6. Если сокет недоступен — показать connection warning, но **не** `Investigation failed`.
+## 6. Как именно работает realtime
 
-Проектная подписка Dashboard отличается от run subscriptions; у проектных событий может не быть общего sequence, поэтому после reconnect Dashboard перечитывает summary.
+1. Пользователь выбирает `investigation_id`, Frontend делает `GET /investigations/{id}` и `GET /investigations/{id}/events?after_sequence=0` с пагинацией до конца начального окна.
+2. Сортирует по `sequence`, запоминает `last_contiguous_sequence` (не max увиденного при gaps).
+3. Получает WS-ticket, открывает WS и посылает `subscribe` с `after_sequence=last_contiguous_sequence`.
+4. При `event.sequence == last+1` применяет; при `<=last` игнорирует дубль; при `>last+1` буферизует, запрашивает REST replay и только после восполнения gap продолжает.
+5. `tool.started`/`tool.completed`/`hypothesis.updated` изменяют только соответствующее представление; payload events может быть summary, полной Evidence надо запрашивать отдельным REST методом.
+6. По `investigation.completed`/`inconclusive`/`failed`/`timed_out`/`canceled` обновляет run через REST; `completed` показывается только после сохранения отчёта Main Backend.
+7. При disconnect показывать `Соединение восстанавливается`, НЕ `Расследование завершилось с ошибкой`. Выполнять exponential backoff с jitter и абсолютным cap; при reconnect делать REST backfill.
+8. Проектные WS события (`incident.created/updated`) не гарантируют непрерывный sequence: обновлять overview/incidents через invalidate/re-fetch.
 
-## 5. Действия пользователя и последствия
+**Reducer тестировать на:** out-of-order `1,3,2`, повтор `2,2`, WS disconnect между start и final, смена выбранного run, события другого incident, запоздалый event после terminal, cancel race.
 
-| Действие | Команда к Main Backend | Что UI делает после ответа |
+## 7. Incident Detail: шесть вкладок и данные
+
+| Вкладка | API | UX при отсутствующих данных |
 |---|---|---|
-| Login | email/password; затем OTP verify | не считать 202 первым этапом успешным входом |
-| Start investigation | команда запуска Incident | получить run ID и перейти в Live |
-| Cancel | команда отмены run | показать `cancel_requested`, ждать terminal event |
-| Retry | повтор с новым run ID | переключиться на новую попытку, старую сохранить в истории |
-| Review | confirm/reject/correct RCA | сохранить separate review, не перетирать RCA |
-| Test integration | безопасная проверка через Main | обновить статус источника, не раскрыть секрет |
+| Overview | incident + latest investigation | Нет run → CTA Start (Developer/Admin) |
+| Live | investigation + events + WS | Нет run → пустой state; disconnected → keep history |
+| Hypotheses | `/investigations/{id}/hypotheses` | `0` гипотез = пусто, не создавать фейковые |
+| Evidence | `/investigations/{id}/evidence`; `/evidence/{id}` | показать source, observed_at, truncated, safe excerpt; link allowlist |
+| Timeline | `/incidents/{id}/timeline` | causal tag observed/correlated/supported_cause/unknown |
+| RCA | `/investigations/{id}/report`, `/reviews` | `inconclusive` отдельный outcome; human review отдельно |
 
-## 6. Контроль качества
+**Отрисовка status:** Incident = open/investigating/awaiting_review/resolved; Investigation = pending/running/completed/inconclusive/failed/timed_out/canceled; Review = confirmed/rejected/corrected. Нельзя отображать 12 из 20 steps как «60% готовности», это **расход бюджета**, не progress percent.
 
-- Одни и те же статусы отображаются одинаково на Overview, Incidents, Live и Detail.
-- Нет фальшивого completion percentage; `step 12/20` — расход бюджета, не готовность 60%.
-- Error UI отличает permission denied, network error, AI failure, inconclusive, empty.
-- Клики на Evidence ведут только по разрешённым verified URLs.
-- Все действия disabled во время pending и защищены от двойного сабмита.
-- Таблицы доступны с клавиатуры, время отображается с timezone, длинные логи ограничены.
-- Тесты мокового UI не выдаются за реальную интеграцию с Backend.
+**Start:** отправить `Idempotency-Key`, обработать `202`, `Location`, открыть live view; кнопку дизейблить во время pending. **Cancel:** пользователь подтверждает, UI показывает `cancel_requested`, но run остаётся running пока не придёт terminal. **Retry:** новая investigation ID, старая попытка остаётся видна. **Review:** форма с decision и comment; исправление обязательно требует corrected_root_cause, оригинальный RCA не изменяется.
 
-## 7. Не входит во Frontend
+## 8. RBAC, scope, безопасные ссылки
 
-Приём webhook, запуск LangGraph, сбор MCP tools, хранение токенов источников, защита DB, генерация RCA, управление очередностью run. Frontend **не решает самостоятельно**, какой tool-call выполнять; только визуализирует их результат.
+Viewer читает только разрешённые проекты; Developer также Start/Retry/Cancel/Review/Resolve; Admin управляет project/service/integrations/users. UI скрывает действия по роли, но **сервер является единственным authority**. После каждого `/users/me` обновлять controls. Никаких `dangerouslySetInnerHTML` для log excerpts или LLM текста; Markdown только sanitised AST с запретом JS/HTML. Evidence `url` открывать после проверенного trusted hosts policy и с `rel="noopener noreferrer"`; никогда не строить URL напрямую из prompt/сырого текста модели.
 
-См. [UI/UX](03_UI_UX.md), [Backend](05_BACKEND.md) и [сценарии](02_USE_CASES.md).
+## 9. UI states, дизайн, UX
+
+Для каждой страницы обязательны `initial/loading/empty/success/partial/error/forbidden`, retry CTA, skeleton вместо layout shift. Тёмный профессиональный интерфейс из Figma B, компактные таблицы и графики, единая типографика, размеры и статусы, no glass/neon decorative fluff. На узких экранах таблицы скроллятся, формы доступны клавиатуре, фокус управляемый, контраст минимум WCAG AA, время отображается в timezone пользователя (сервер хранит UTC).
+
+**Logs/Metrics/Traces P1:** реализовать только после готовности bounded proxy API в Main. До тех пор можно сделать UI shell, но не генерировать фиктивные сервисные логи под видом источников.
+
+## 10. Тесты и Definition of Done
+
+- Unit: formatter/timezone, permission selectors, status labels, event reducer, validation of URLs.
+- Component: login errors/OTP, empty incident, three outcomes report, Evidence safe excerpts, disabled actions, role guards.
+- API contract tests: MSW fixtures соответствуют **актуализированному OpenAPI**, тесты типов ломаются при несовместимом изменении DTO.
+- E2E: login→OTP→incidents→start→live events→result→review; reconnect/backfill; Viewer forbidden; 429 busy; timeout; 404 report before completion.
+- `npm ci`, lint, typecheck, tests и production build реально проходят; backend E2E — отдельно, не выдавать MSW mock за интеграцию.
+
+### Готовность Frontend P0
+
+1. Отображается текущий Incident из Main, не hardcoded UI fixture.
+2. Работают все auth states, включая OTP resend/expiry.
+3. Start создаёт правильную investigation attempt; Live получает persist/replay events.
+4. Результат различает completed/inconclusive/failed; Evidence provenance доступен.
+5. Review сохраняется в Main и не перетирает RCA.
+6. Нет прямых запросов к AI/MCP/сервисным секретам.
+
+**Передача от Backend:** public OpenAPI/fixtures; для каждого маршрута error example; WS message fixtures; тестовая учётная запись разных ролей в DEMO (не production secrets); URL dev gateway. **Со стороны Frontend:** типизированный SDK, UI tests и E2E сценарий из [13_INTEGRATION_AND_HANDOFF.md](13_INTEGRATION_AND_HANDOFF.md).

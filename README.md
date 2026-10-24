@@ -1,75 +1,93 @@
-# AI Incident Investigator
+# AI Incident Investigator — документация продукта и технический baseline
 
-> **Документация продукта через разные точки зрения**  
-> Версия: `product-perspectives/1.0` · 24 октября 2026 · Язык: русский  
-> Основа: предоставленный пакет `AI_Incident_Investigator_API_Contracts v0.2`, ранее сформированные требования к UI (Figma B), текущие договорённости команды.
+**Редакция:** `product-perspectives/2.0` · 25 октября 2026. **Язык:** русский. **Статус:** рабочая спецификация для общего инженерного ревью; не равна реализованному production коду. Источник — архив API Contracts v0.2, текущие Figma/UI и repo-практики команды. **Что изменилось в v2:** вместо поверхностных описаний Frontend, Backend и AI добавлены реальные контракты, модели данных, runtime и интеграционная схема.
 
-**AI Incident Investigator** — платформа, которая помогает инженерам расследовать технические инциденты в микросервисных приложениях. Она не просто сообщает, что «платежи возвращают 500», а собирает данные из систем наблюдаемости и кода, проверяет гипотезы, предлагает вероятную первопричину и действия по её устранению. **Решение остаётся за человеком:** агент не исправляет production автоматически.
+> **Кратко о продукте:** инженер видит технический Incident, запускает AI Investigation, получает Evidence из логов/метрик/трейсов/Git/deployments, проверяет гипотезы и RCA, затем подтверждает/корректирует результат. AI не исправляет production автоматически.
 
-Этот комплект отвечает на один вопрос с разных сторон: **что мы строим, для кого, как это работает, что видит пользователь и какая часть системы за это отвечает**. Он намеренно **не переписывает** весь черновой OpenAPI и JSON Schema и **не изображает будущие функции уже реализованными**.
+## 1. Навигация: читать не всё сразу
 
-## Навигация
-
-| № | Документ | Главный вопрос | Кому читать |
+| № | Документ | На какой вопрос отвечает | Аудитория |
 |---|---|---|---|
-| 00 | [Продукт](00_PRODUCT.md) | Что это такое, какую проблему решает, какой результат даёт? | Всем, сначала |
-| 01 | [Бизнес-логика](01_BUSINESS_LOGIC.md) | Что происходит с момента подключения проекта до закрытия инцидента? | Всем |
-| 02 | [Use cases](02_USE_CASES.md) | Что делает пользователь в конкретной ситуации, что отвечает система? | Product, QA, Front, Back, AI |
-| 03 | [UI / UX](03_UI_UX.md) | Что находится на экранах, как человек понимает происходящее? | Front, дизайн, product |
-| 04 | [Frontend](04_FRONTEND.md) | Какие данные получает браузер и как работает realtime? | Расул, Юрий |
-| 05 | [Backend](05_BACKEND.md) | Кто хранит данные, принимает команды, защищает доступ? | Юрий, Олег |
-| 06 | [AI-агент](06_AI_AGENT.md) | Как агент расследует и формирует доказательный RCA? | Олег, Юрий |
-| 07 | [Заказчик и ценность](07_CUSTOMER.md) | Кто купил бы продукт, зачем и как оценивать пользу? | Заказчик, руководитель, команда |
-| 08 | [Инфраструктура и демостенд](08_INFRA_AND_DEMO.md) | Где всё работает и на чём демонстрируем инциденты? | Даниил, Олег, Юрий |
-| 09 | [Сквозные сценарии](09_END_TO_END.md) | Как связаны все части в одном расследовании? | Всем, для синхронизации |
-| 10 | [Границы MVP и приёмка](10_SCOPE_AND_ACCEPTANCE.md) | Что обязательно работает к первой демонстрации? | Всем |
-| 11 | [Источники и статус решений](11_SOURCES_AND_DECISIONS.md) | Что опирается на архив, что изменилось позже, что не надо выдумывать? | Разработчикам / Codex |
+| 00 | [PRODUCT](00_PRODUCT.md) | Что это за продукт, какая ценность, границы | Все / заказчик |
+| 01 | [BUSINESS LOGIC](01_BUSINESS_LOGIC.md) | Как работает Incident → Investigation → Review | Все |
+| 02 | [USE CASES](02_USE_CASES.md) | Что делает пользователь и что возвращает система | PM, QA, Front/Back |
+| 03 | [UI/UX](03_UI_UX.md) | Экраны, состояния, вкладки и навигация | Расул |
+| **04** | **[FRONTEND TECHNICAL](04_FRONTEND.md)** | **React модули, REST/WS SDK, состояние, auth, replay, тесты** | **Расул** |
+| **05** | **[MAIN BACKEND TECHNICAL](05_BACKEND.md)** | **БД, RBAC, ingestion, REST, durable dispatch, callbacks, WS** | **Юрий** |
+| **06** | **[AI AGENT TECHNICAL](06_AI_AGENT.md)** | **LangGraph, LLM, MCP, evidence, PG checkpoints, runtime** | **Олег** |
+| 07 | [CUSTOMER](07_CUSTOMER.md) | Как оценивает полезность заказчик | PM / заказчик |
+| **08** | **[INFRA + DEMO](08_INFRA_AND_DEMO.md)** | **k3d, Prom/Loki/Tempo, payment scenarios, telemetry labels** | **Даниил** |
+| **09** | **[END TO END](09_END_TO_END.md)** | **Полная HTTP/DB/WS последовательность и recovery** | **Все** |
+| 10 | [MVP/ACCEPTANCE](10_SCOPE_AND_ACCEPTANCE.md) | Что входит в MVP, что не входит | Все |
+| **11** | **[SOURCES/DECISIONS](11_SOURCES_AND_DECISIONS.md)** | **Что известно, что выбрано в v2 и что пока не реализовано** | **Все** |
+| **12** | **[INTERSERVICE CONTRACTS](12_INTERSERVICE_CONTRACTS.md)** | **Единые REST/WS/MCP контракты, JSON, errors, RBAC** | **Front/Back/AI** |
+| **13** | **[INTEGRATION & HANDOFF](13_INTEGRATION_AND_HANDOFF.md)** | **Кто что отдаёт и в каком порядке интегрироваться** | **Вся команда** |
+| **14** | **[ACCEPTANCE & CONTRACT TESTS](14_ACCEPTANCE_AND_CONTRACT_TESTS.md)** | **Конкретные тесты и PASS/FAIL gates** | **QA/вся команда** |
 
-## Как читать, чтобы не тратить контекст зря
+**Для первого чтения заказчиком:** `00 → 01 → 02 → 03 → 07`. **Для разработки:** `README → 12 → свой профильный 04/05/06/08 → 13 → 14`. Не передавать Codex весь архив за один запрос: одну Story + профильный документ + конкретный раздел контракта.
 
-- **Для общего понимания и презентации:** `README → 00 → 07 → 02 → 09`.
-- **Для Frontend:** `README → 03 → 04 → 01 → 02`.
-- **Для Backend:** `README → 01 → 05 → 09 → 11`.
-- **Для AI Backend:** `README → 01 → 06 → 09 → 11`.
-- **Для Demo/Infra:** `README → 08 → 09 → 10`.
-- **Для Codex:** этот README + **один профильный документ и актуальный контракт**, а не весь пакет сразу.
-
-## Общая модель продукта
+## 2. Главная архитектура
 
 ```mermaid
 flowchart LR
-  U[Инженер / SRE] <-->|REST + WebSocket| F[Frontend]
-  F <-->|API / события| B[Main Backend]
-  B <-->|Прямое межсервисное взаимодействие| A[AI Backend]
-  A --> L[Локальная Qwen через llama.cpp]
-  A --> MC[MCP Client]
-  MC --> MS[MCP-инструменты]
-  MS --> O[Логи / Метрики / Трейсы / Git / Deployments]
-  B --> PG[(PostgreSQL: инциденты, RCA, права)]
-  A --> CK[(PostgreSQL: checkpoints / run state)]
+  Browser[React browser] <-->|REST + WebSocket| Main[Main Backend]
+  Auth[Auth service: password + email OTP] <-->|internal identity / session| Main
+  Main <-->|REST internal Start / callbacks| AI[AI Backend]
+  AI --> LLM[llama-server / Qwen]
+  AI <-->|MCP Streamable HTTP| MCP[MCP Server read-only]
+  MCP --> Loki[Loki logs]
+  MCP --> Prom[Prometheus metrics]
+  MCP --> Tempo[Tempo traces]
+  MCP --> Git[GitHub / Deployment registry]
+  Main --> PG1[(Main PostgreSQL)]
+  AI --> PG2[(AI PostgreSQL checkpoints)]
+  Demo[Demo Payment Service] --> Infra[Alloy / observability]
+  Infra --> Loki
+  Infra --> Prom
+  Infra --> Tempo
 ```
 
-**Важно:** на схеме отражены **логические обязанности**. Из документа не следует, что каждый прямоугольник — отдельный развернутый микросервис. MCP-слой логически отделён, но его физическое размещение требует согласования командой. В актуальной инфраструктуре для логов есть **Loki**; исходный v0.2-каталог описывал **Elasticsearch**, поэтому адаптер логов должен быть согласован с фактическим источником.
+**Ключевые границы:** Browser не обращается к AI/MCP; Main владеет Incident, RCA и Review; AI владеет расследованием и его execution state; MCP только read-only; Infra поставляет настоящие диагностические данные. RabbitMQ между Main и AI нет.
 
-## Семь фундаментальных правил
+## 3. Решения рабочего baseline v2
 
-1. **Incident ≠ Investigation.** Инцидент описывает проблему, investigation — конкретную попытку AI-разбора. У одного инцидента может быть несколько попыток.
-2. **Только факты.** Агент не придумывает логи, метрики, trace ID, коммиты или ссылки. Любой значимый вывод связан с Evidence.
-3. **Human-in-the-loop.** RCA — предложение с доказательствами; человек подтверждает, исправляет или отклоняет. Завершение расследования не закрывает инцидент автоматически.
-4. **Read-only диагностика.** AI не делает restart, rollback, patch, SQL write или произвольные shell-команды.
-5. **Асинхронность.** Расследование может длиться до 20 минут; пользователь видит ход, а WebSocket можно переподключить без потери run.
-6. **Без RabbitMQ между Main Backend и AI Backend.** Это более позднее решение команды и оно важнее прежних схем.
-7. **MVP прежде расширений.** Рабочее расследование важнее декоративных дашбордов, чата и RAG.
+| Вопрос | Один выбранный путь |
+|---|---|
+| Main ↔ AI | **REST JSON**, прямой private API, service identity |
+| AI агент | Один ReAct LangGraph на Qwen через llama.cpp |
+| MCP | Внутренний AI-owned Streamable HTTP Server, read-only |
+| Логи | **Loki**, не Elasticsearch из исторических схем |
+| Метрики / трейсы | Prometheus / Tempo через существующий Alloy |
+| Auth | Password → email OTP каждый новый вход; refresh HttpOnly cookie |
+| WebSocket auth | 30-секундный single-use HttpOnly WS ticket cookie, Origin check |
+| Long-running runs | PostgreSQL registry/checkpoints, Main dispatch/outbox, no HTTP 20min |
+| AI busy | 429 + Retry-After, Main durable bounded retry |
+| Reliable result | AI callback + GET result readback, Main atomic persistence |
+| AI budget | ≤20 steps, ≤40 tool calls, ≤1200 sec, 1 active executor MVP |
+| RAG | P2, не условие MVP |
 
-## Как выглядит успех за одну минуту
+**Статус решений:** первые доменные принципы подтверждены историей проекта; конкретный выбор транспорта, MCP deployment и cookie-механизма в этой редакции — **целевой проектный baseline для утверждения командой**, а не утверждение о уже принятых всеми решениях. До codegen старые машинные OpenAPI/JSON Schema надо синхронизировать по [11](11_SOURCES_AND_DECISIONS.md). Это единое направление реализации; не делать альтернативный вариант без ADR.
 
-Инженер замечает «`payment-service` возвращает HTTP 500». Открывает инцидент, запускает расследование и видит действия агента. Агент проверяет логи, рост DB pool timeouts, p95 и историю deployment, находит подтверждающие записи и формирует RCA. Инженер открывает каждое доказательство, принимает или корректирует вывод и самостоятельно исправляет проблему. Система сохраняет всю историю для аудита.
+## 4. Что должен сделать каждый разработчик
 
-## Что означает «описано» и «сделано»
+**Расул — Frontend:** Login/OTP, Incident UI, Live WS reducer, Evidence/RCA/Review. Получает от Юрия public OpenAPI и event fixtures. Читает [04](04_FRONTEND.md), [12](12_INTERSERVICE_CONTRACTS.md) §3–§4,§6, [13](13_INTEGRATION_AND_HANDOFF.md).
 
-Это **продуктовая документация**, не отчёт о готовности программного кода. Сейчас существуют UI-макеты/каркас, FastAPI-каркасы, локальная интеграция Qwen через LangGraph и инфраструктурные конфигурации. Полный MCP→RCA→WebSocket end-to-end и приёмка продукта **не подтверждены**. Не путайте требования, предложенные решения и фактически работающие компоненты.
+**Юрий — Backend:** scoped Project/Service/Incident, durable Investigation dispatch, internal AI HTTP, event/result sink, WS replay, Review, audit. Отдаёт Расулу OpenAPI и Олегу internal callbacks. Читает [05](05_BACKEND.md), [12](12_INTERSERVICE_CONTRACTS.md), [13](13_INTEGRATION_AND_HANDOFF.md).
 
----
+**Олег — AI:** tool calling verification, Pydantic domain, single LangGraph agent, MCP Loki/Prom/Tempo, Evidence/RCA, PG durable executor, callbacks. Отдаёт Юрию internal REST contract/fixtures. Читает [06](06_AI_AGENT.md), [12](12_INTERSERVICE_CONTRACTS.md) §5–§6, [13](13_INTEGRATION_AND_HANDOFF.md).
 
-**Первый документ:** [00 — Продукт](00_PRODUCT.md).  
-**Проверка ожиданий:** [10 — MVP и приёмка](10_SCOPE_AND_ACCEPTANCE.md).
+**Даниил — Infra/Demo:** payment-service, healthy + controlled faults, k3d observability source readiness, Grafana dashboards, runbook. Отдаёт остальным настоящие labels/source IDs/time windows, без подсовывания AI готового ground truth. Читает [08](08_INFRA_AND_DEMO.md) и [13](13_INTEGRATION_AND_HANDOFF.md) §4–§5.
+
+## 5. Как начать разработку без ожидания других
+
+1. Команда утверждает baseline v2, исправляет расхождения старого v0.2 в canonical OpenAPI/Schema/fixtures.
+2. Юрий поднимает public mock и internal fake AI; Расул делает UI на fixtures; Олег делает graph + fake MCP; Даниил поднимает payment telemetry.
+3. Юрий ↔ Олег проверяют реальный Start/events/result HTTP; только затем Расул переключает UI на настоящий Main.
+4. G01 — локальная проверка агента **перед AI-10 Postgres checkpoints**. Следующая G02 — долгоживущее исполнение и интеграция. G03 — полный browser-to-demo scenario.
+5. Каждый PR предоставляет: contract change, unit tests, integration tests (или NOT RUN), error paths, reproducible smoke.
+
+**Где подробности:** [13 — конкретные handoffs](13_INTEGRATION_AND_HANDOFF.md) и [14 — acceptance](14_ACCEPTANCE_AND_CONTRACT_TESTS.md).
+
+## 6. Чего этот документ не утверждает
+
+Наличие файла с маршрутом **не означает**, что он реализован. Реально проверена локальная интеграция AI-01 с Qwen; полноценный MCP→RCA→Main→Frontend сценарий пока является целевой архитектурой. `v0.2-draft` машинные схемы не синхронизированы автоматически при изменении Markdown. Не копируйте примеры в production без auth/scope/contract тестов.

@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "11_SOURCES_AND_DECISIONS.md",
+                "file": "08_INFRA_AND_DEMO 1.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "11_SOURCES_AND_DECISIONS"
+              "title": "08_INFRA_AND_DEMO 1"
             }
           }
         ]
@@ -99,7 +99,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "11_SOURCES_AND_DECISIONS.md",
+                "file": "08_INFRA_AND_DEMO 1.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -118,7 +118,7 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "11_SOURCES_AND_DECISIONS.md",
+                "file": "08_INFRA_AND_DEMO 1.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
@@ -161,7 +161,7 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "11_SOURCES_AND_DECISIONS.md",
+                "file": "08_INFRA_AND_DEMO 1.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
@@ -188,19 +188,24 @@
       "bases:Создать новую базу": false
     }
   },
-  "active": "15d73c814ab8aec3",
+  "active": "42aaf3e844c6bc67",
   "lastOpenFiles": [
+    "README.md",
+    "14_ACCEPTANCE_AND_CONTRACT_TESTS.md",
+    "13_INTEGRATION_AND_HANDOFF.md",
+    "12_INTERSERVICE_CONTRACTS.md",
+    "11_SOURCES_AND_DECISIONS.md",
     "09_END_TO_END.md",
-    "10_SCOPE_AND_ACCEPTANCE.md",
     "08_INFRA_AND_DEMO.md",
-    "07_CUSTOMER.md",
+    "08_INFRA_AND_DEMO 1.md",
     "06_AI_AGENT.md",
     "05_BACKEND.md",
     "04_FRONTEND.md",
+    "10_SCOPE_AND_ACCEPTANCE.md",
+    "07_CUSTOMER.md",
     "03_UI_UX.md",
     "02_USE_CASES.md",
     "01_BUSINESS_LOGIC.md",
-    "00_PRODUCT.md",
-    "README.md"
+    "00_PRODUCT.md"
   ]
 }
