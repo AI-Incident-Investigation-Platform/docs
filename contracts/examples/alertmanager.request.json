@@ -1,0 +1,21 @@
+{
+  "receiver": "investigator",
+  "status": "firing",
+  "groupKey": "payment-service",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "High5xxRate",
+        "service": "payment-service",
+        "severity": "critical"
+      },
+      "annotations": {
+        "summary": "5xx rate high"
+      },
+      "startsAt": "2026-10-19T14:35:00Z",
+      "endsAt": "2026-10-19T14:35:00Z",
+      "fingerprint": "a1b2c3"
+    }
+  ]
+}

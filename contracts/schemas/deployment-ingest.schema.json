@@ -1,0 +1,3244 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AI-Incident-Investigation-Platform/docs/blob/main/contracts/schemas/domain.schema.json",
+  "$defs": {
+    "UUID": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "ErrorDetail": {
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "field",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "Problem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "error"
+      ],
+      "properties": {
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "message",
+            "request_id"
+          ],
+          "properties": {
+            "code": {
+              "type": "string",
+              "minLength": 1
+            },
+            "message": {
+              "type": "string"
+            },
+            "request_id": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "description": "Единый JSON error envelope для public/internal API; details sanitized"
+    },
+    "User": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "email": {
+          "type": "string",
+          "format": "email"
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "admin",
+            "developer",
+            "viewer"
+          ]
+        },
+        "project_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "is_active": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "display_name",
+        "role",
+        "project_ids",
+        "is_active"
+      ],
+      "additionalProperties": false
+    },
+    "LoginRequest": {
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email"
+        },
+        "password": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "email",
+        "password"
+      ],
+      "additionalProperties": false
+    },
+    "AuthTokens": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "access_token",
+        "token_type",
+        "expires_in"
+      ],
+      "properties": {
+        "access_token": {
+          "type": "string",
+          "minLength": 1
+        },
+        "token_type": {
+          "type": "string",
+          "const": "bearer"
+        },
+        "expires_in": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "Project": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "slug": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "description": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        },
+        "archived_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "slug",
+        "created_at"
+      ],
+      "additionalProperties": false
+    },
+    "ProjectWrite": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "slug": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "slug"
+      ],
+      "additionalProperties": false
+    },
+    "Environment": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "project_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "slug": {
+          "type": "string"
+        },
+        "is_production": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "project_id",
+        "name",
+        "slug",
+        "is_production"
+      ],
+      "additionalProperties": false
+    },
+    "EnvironmentWrite": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "slug": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "is_production": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "slug"
+      ],
+      "additionalProperties": false
+    },
+    "Service": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "project_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "environment_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "external_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "description": {
+          "type": "string"
+        },
+        "repository_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "health_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        }
+      },
+      "required": [
+        "id",
+        "project_id",
+        "environment_id",
+        "name",
+        "external_names",
+        "created_at"
+      ],
+      "additionalProperties": false
+    },
+    "ServiceWrite": {
+      "type": "object",
+      "properties": {
+        "environment_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "external_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "description": {
+          "type": "string"
+        },
+        "repository_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "health_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "environment_id",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "Deployment": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "project_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "environment_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "service_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "version": {
+          "type": "string"
+        },
+        "commit_sha": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "deployed_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "started",
+            "succeeded",
+            "failed",
+            "rolled_back"
+          ]
+        },
+        "source": {
+          "type": "string"
+        },
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "project_id",
+        "environment_id",
+        "service_id",
+        "version",
+        "deployed_at",
+        "status",
+        "source"
+      ],
+      "additionalProperties": false
+    },
+    "Incident": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "environment_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "service_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "investigating",
+            "awaiting_review",
+            "resolved"
+          ]
+        },
+        "source": {
+          "type": "string"
+        },
+        "detected_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        },
+        "resolved_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "latest_investigation_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "alert_fingerprint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "project_id",
+        "environment_id",
+        "service_ids",
+        "severity",
+        "status",
+        "source",
+        "detected_at",
+        "created_at",
+        "updated_at"
+      ],
+      "additionalProperties": false
+    },
+    "IncidentCreate": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "description": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "environment_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "service_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "detected_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "project_id",
+        "environment_id",
+        "service_ids",
+        "severity",
+        "detected_at"
+      ],
+      "additionalProperties": false
+    },
+    "IncidentStatusChange": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "resolved"
+          ]
+        },
+        "comment": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "additionalProperties": false,
+      "description": "Automated investigation statuses are server-owned; user actions may reopen/resolve with permissions"
+    },
+    "ExecutionBudget": {
+      "type": "object",
+      "properties": {
+        "max_steps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "max_tool_calls": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 40
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1200
+        }
+      },
+      "required": [
+        "max_steps",
+        "max_tool_calls",
+        "timeout_seconds"
+      ],
+      "additionalProperties": false
+    },
+    "Investigation": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "incident_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "project_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "environment_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "running",
+            "completed",
+            "inconclusive",
+            "failed",
+            "timed_out",
+            "canceled"
+          ]
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        },
+        "started_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "finished_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "parent_investigation_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "current_step": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tool_calls_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "budget": {
+          "$ref": "#/$defs/ExecutionBudget"
+        },
+        "failure_code": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "failure_message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cancel_requested": {
+          "type": "boolean",
+          "default": false,
+          "description": "Transient request flag, not Investigation.status"
+        }
+      },
+      "required": [
+        "id",
+        "incident_id",
+        "project_id",
+        "environment_id",
+        "status",
+        "created_at",
+        "attempt",
+        "current_step",
+        "tool_calls_count",
+        "budget",
+        "cancel_requested"
+      ],
+      "additionalProperties": false
+    },
+    "InvestigationCreate": {
+      "type": "object",
+      "properties": {
+        "context_note": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "MVP normally starts without arbitrary user prompt; context_note optional internal/manual note not forwarded as tool instruction"
+    },
+    "SourceLink": {
+      "type": "object",
+      "properties": {
+        "source_type": {
+          "type": "string",
+          "enum": [
+            "loki",
+            "prometheus",
+            "tempo",
+            "github",
+            "kubernetes",
+            "deployment",
+            "healthcheck",
+            "manual",
+            "docs_rag",
+            "incident_memory"
+          ]
+        },
+        "source_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri"
+        },
+        "observed_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean",
+              "null"
+            ]
+          }
+        }
+      },
+      "required": [
+        "source_type"
+      ],
+      "additionalProperties": false
+    },
+    "Evidence": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "investigation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "source": {
+          "$ref": "#/$defs/SourceLink"
+        },
+        "title": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "excerpt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "service_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "hypothesis_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "collected_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        },
+        "confidence_note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "investigation_id",
+        "source",
+        "title",
+        "summary",
+        "service_ids",
+        "hypothesis_ids",
+        "collected_at"
+      ],
+      "additionalProperties": false,
+      "description": "Excerpt is sanitized and bounded, raw telemetry stays in its source"
+    },
+    "Hypothesis": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "investigation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "title": {
+          "type": "string"
+        },
+        "explanation": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "supported",
+            "rejected"
+          ]
+        },
+        "confidence": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        }
+      },
+      "required": [
+        "id",
+        "investigation_id",
+        "title",
+        "explanation",
+        "status",
+        "confidence",
+        "evidence_ids",
+        "updated_at"
+      ],
+      "additionalProperties": false
+    },
+    "TimelineEntry": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "incident_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "investigation_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        },
+        "event_type": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "service_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "source": {
+          "$ref": "#/$defs/SourceLink"
+        },
+        "causality": {
+          "type": "string",
+          "enum": [
+            "observed",
+            "correlated",
+            "supported_cause",
+            "unknown"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "incident_id",
+        "occurred_at",
+        "event_type",
+        "title",
+        "description",
+        "service_ids",
+        "source",
+        "causality"
+      ],
+      "additionalProperties": false
+    },
+    "RCAReport": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "incident_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "investigation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "completed",
+            "inconclusive"
+          ]
+        },
+        "summary": {
+          "type": "string"
+        },
+        "symptoms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "root_cause": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "root_cause_service_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "causal_chain": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "hypothesis_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "timeline_entry_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "confidence": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "remediation": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "prevention": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        }
+      },
+      "required": [
+        "id",
+        "incident_id",
+        "investigation_id",
+        "outcome",
+        "summary",
+        "symptoms",
+        "root_cause",
+        "root_cause_service_ids",
+        "causal_chain",
+        "hypothesis_ids",
+        "evidence_ids",
+        "timeline_entry_ids",
+        "confidence",
+        "remediation",
+        "prevention",
+        "limitations",
+        "generated_at"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "completed"
+              }
+            },
+            "required": [
+              "outcome"
+            ]
+          },
+          "then": {
+            "properties": {
+              "root_cause": {
+                "type": "string",
+                "minLength": 1
+              },
+              "evidence_ids": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "ReviewCreate": {
+      "type": "object",
+      "properties": {
+        "investigation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "decision": {
+          "type": "string",
+          "enum": [
+            "confirmed",
+            "rejected",
+            "corrected"
+          ]
+        },
+        "corrected_root_cause": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "comment": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        }
+      },
+      "required": [
+        "investigation_id",
+        "decision",
+        "comment"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "decision": {
+                "const": "corrected"
+              }
+            },
+            "required": [
+              "decision"
+            ]
+          },
+          "then": {
+            "required": [
+              "corrected_root_cause"
+            ],
+            "properties": {
+              "corrected_root_cause": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4000
+              }
+            }
+          }
+        }
+      ]
+    },
+    "Review": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "incident_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "investigation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "reviewer_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "decision": {
+          "type": "string",
+          "enum": [
+            "confirmed",
+            "rejected",
+            "corrected"
+          ]
+        },
+        "corrected_root_cause": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "comment": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        }
+      },
+      "required": [
+        "id",
+        "incident_id",
+        "investigation_id",
+        "reviewer_id",
+        "decision",
+        "comment",
+        "created_at"
+      ],
+      "additionalProperties": false
+    },
+    "ToolCall": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "investigation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "started",
+            "completed",
+            "failed",
+            "timed_out"
+          ]
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        },
+        "finished_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "duration_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "input_summary": {
+          "type": "string"
+        },
+        "output_summary": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "error_code": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "investigation_id",
+        "name",
+        "status",
+        "started_at",
+        "input_summary"
+      ],
+      "additionalProperties": false
+    },
+    "InvestigationEvent": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "enum": [
+            "1.0"
+          ]
+        },
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "investigation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "incident_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "investigation.pending",
+            "investigation.started",
+            "investigation.progress",
+            "tool.started",
+            "tool.completed",
+            "tool.failed",
+            "hypothesis.updated",
+            "evidence.added",
+            "investigation.completed",
+            "investigation.inconclusive",
+            "investigation.failed",
+            "investigation.timed_out",
+            "investigation.canceled"
+          ]
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "investigation_id",
+        "incident_id",
+        "sequence",
+        "type",
+        "occurred_at",
+        "data"
+      ],
+      "additionalProperties": false,
+      "description": "Canonical event envelope. The detailed discriminated payloads are in schemas/ai-events.schema.json"
+    },
+    "StartAIRequest": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "enum": [
+            "1.0"
+          ]
+        },
+        "investigation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "incident_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "project_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "environment_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "service_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "detected_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        },
+        "window": {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string",
+              "format": "date-time",
+              "description": "UTC, RFC3339 timestamp"
+            },
+            "to": {
+              "type": "string",
+              "format": "date-time",
+              "description": "UTC, RFC3339 timestamp"
+            }
+          },
+          "required": [
+            "from",
+            "to"
+          ],
+          "additionalProperties": false
+        },
+        "alert_summary": {
+          "type": "string"
+        },
+        "budget": {
+          "$ref": "#/$defs/ExecutionBudget"
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "parent_investigation_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "schema_version",
+        "investigation_id",
+        "incident_id",
+        "project_id",
+        "environment_id",
+        "service_ids",
+        "detected_at",
+        "window",
+        "alert_summary",
+        "budget",
+        "attempt",
+        "parent_investigation_id"
+      ],
+      "additionalProperties": false,
+      "description": "Callback destination is fixed by AI service configuration (MAIN_BACKEND_INTERNAL_URL), NOT request payload"
+    },
+    "StartAIAck": {
+      "type": "object",
+      "properties": {
+        "investigation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "running"
+          ]
+        },
+        "accepted_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        }
+      },
+      "required": [
+        "investigation_id",
+        "status",
+        "accepted_at"
+      ],
+      "additionalProperties": false
+    },
+    "AIResultCallback": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "enum": [
+            "1.0"
+          ]
+        },
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "investigation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "incident_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "completed",
+            "inconclusive",
+            "failed",
+            "timed_out",
+            "canceled"
+          ]
+        },
+        "finished_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        },
+        "report": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/RCAReport"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hypotheses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Hypothesis"
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          }
+        },
+        "timeline": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TimelineEntry"
+          }
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "investigation_id",
+        "incident_id",
+        "status",
+        "finished_at",
+        "report",
+        "hypotheses",
+        "evidence",
+        "timeline"
+      ],
+      "additionalProperties": false,
+      "description": "Final result delivered at least once, dedup by event_id; full report only completed/inconclusive",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "completed",
+                  "inconclusive"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "report": {
+                "$ref": "#/$defs/RCAReport"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "AIHealth": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "degraded",
+            "unavailable"
+          ]
+        },
+        "model_ready": {
+          "type": "boolean"
+        },
+        "active_investigations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_concurrency": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "status",
+        "model_ready",
+        "active_investigations",
+        "max_concurrency"
+      ],
+      "additionalProperties": false
+    },
+    "CancelAck": {
+      "type": "object",
+      "properties": {
+        "investigation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "cancel_requested",
+            "canceled"
+          ]
+        },
+        "requested_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        }
+      },
+      "required": [
+        "investigation_id",
+        "status",
+        "requested_at"
+      ],
+      "additionalProperties": false,
+      "description": "Cancel command accepted; status cancel_requested is not terminal. Only persisted canceled is terminal."
+    },
+    "Integration": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "project_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "environment_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "loki",
+            "prometheus",
+            "tempo",
+            "github",
+            "kubernetes",
+            "healthcheck",
+            "deployment"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "config_public": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "connected",
+            "disconnected",
+            "degraded",
+            "untested"
+          ]
+        },
+        "last_tested_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "project_id",
+        "type",
+        "name",
+        "config_public",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "IntegrationWrite": {
+      "type": "object",
+      "properties": {
+        "project_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "environment_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "loki",
+            "prometheus",
+            "tempo",
+            "github",
+            "kubernetes",
+            "healthcheck",
+            "deployment"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "credential": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "project_id",
+        "type",
+        "name",
+        "config"
+      ],
+      "additionalProperties": false,
+      "description": "Credential accepted on write only, never in responses; type-specific config schema in integration spec"
+    },
+    "TestResult": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "connected",
+            "degraded",
+            "disconnected"
+          ]
+        },
+        "latency_ms": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "tested_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        }
+      },
+      "required": [
+        "status",
+        "message",
+        "tested_at"
+      ],
+      "additionalProperties": false
+    },
+    "Overview": {
+      "type": "object",
+      "properties": {
+        "open_incidents": {
+          "type": "integer"
+        },
+        "critical_incidents": {
+          "type": "integer"
+        },
+        "active_investigations": {
+          "type": "integer"
+        },
+        "resolved_last_24h": {
+          "type": "integer"
+        },
+        "healthy_services": {
+          "type": "integer"
+        },
+        "total_services": {
+          "type": "integer"
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        }
+      },
+      "required": [
+        "open_incidents",
+        "critical_incidents",
+        "active_investigations",
+        "resolved_last_24h",
+        "healthy_services",
+        "total_services",
+        "generated_at"
+      ],
+      "additionalProperties": false
+    },
+    "ServiceHealth": {
+      "type": "object",
+      "properties": {
+        "service_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "healthy",
+            "degraded",
+            "critical",
+            "unknown"
+          ]
+        },
+        "error_rate_pct": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "latency_p95_ms": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        }
+      },
+      "required": [
+        "service_id",
+        "status",
+        "updated_at"
+      ],
+      "additionalProperties": false
+    },
+    "TopologyEdge": {
+      "type": "object",
+      "properties": {
+        "from_service_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "to_service_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "evidence_source": {
+          "type": "string",
+          "enum": [
+            "configured",
+            "traces"
+          ]
+        },
+        "last_observed_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "from_service_id",
+        "to_service_id",
+        "evidence_source"
+      ],
+      "additionalProperties": false
+    },
+    "Topology": {
+      "type": "object",
+      "properties": {
+        "services": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ServiceHealth"
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TopologyEdge"
+          }
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        }
+      },
+      "required": [
+        "services",
+        "edges",
+        "generated_at"
+      ],
+      "additionalProperties": false
+    },
+    "LogSearchRequest": {
+      "type": "object",
+      "properties": {
+        "project_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "environment_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "service_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "from": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        },
+        "to": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        },
+        "query": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        },
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "project_id",
+        "environment_id",
+        "from",
+        "to",
+        "query"
+      ],
+      "additionalProperties": false,
+      "description": "Project-scoped validated search against Loki. Query is a bounded safe text filter, not raw LogQL; labels are enforced server-side."
+    },
+    "LogItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        },
+        "service_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "level": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "trace_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "timestamp",
+        "service_id",
+        "level",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "LogSearchResult": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LogItem"
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "total_estimate": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "next_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "MetricQueryRequest": {
+      "type": "object",
+      "properties": {
+        "project_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "environment_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "from": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        },
+        "to": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        },
+        "step_seconds": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 3600
+        },
+        "query_id": {
+          "type": "string",
+          "enum": [
+            "http_5xx_rate",
+            "http_p95_latency",
+            "http_request_rate",
+            "db_pool_checked_out",
+            "db_pool_timeouts",
+            "pod_restarts",
+            "service_up"
+          ],
+          "description": "Server-side allowlisted PromQL template only; unmapped metrics return controlled error"
+        },
+        "service_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "minItems": 1,
+          "maxItems": 20
+        }
+      },
+      "required": [
+        "project_id",
+        "environment_id",
+        "query_id",
+        "from",
+        "to",
+        "step_seconds",
+        "service_ids"
+      ],
+      "additionalProperties": false,
+      "description": "Server side metric templates only, not arbitrary PromQL"
+    },
+    "MetricSeries": {
+      "type": "object",
+      "properties": {
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "string",
+                "format": "date-time",
+                "description": "UTC, RFC3339 timestamp"
+              },
+              "value": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "at",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "labels",
+        "points"
+      ],
+      "additionalProperties": false
+    },
+    "MetricQueryResult": {
+      "type": "object",
+      "properties": {
+        "series": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MetricSeries"
+          }
+        },
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "series"
+      ],
+      "additionalProperties": false
+    },
+    "TraceSummary": {
+      "type": "object",
+      "properties": {
+        "trace_id": {
+          "type": "string"
+        },
+        "root_service_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        },
+        "duration_ms": {
+          "type": "number"
+        },
+        "span_count": {
+          "type": "integer"
+        },
+        "has_error": {
+          "type": "boolean"
+        },
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "trace_id",
+        "root_service_id",
+        "started_at",
+        "duration_ms",
+        "span_count",
+        "has_error"
+      ],
+      "additionalProperties": false
+    },
+    "TraceSpan": {
+      "type": "object",
+      "properties": {
+        "span_id": {
+          "type": "string"
+        },
+        "parent_span_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "service_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "operation": {
+          "type": "string"
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        },
+        "duration_ms": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "span_id",
+        "service_id",
+        "operation",
+        "started_at",
+        "duration_ms",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "TraceDetail": {
+      "type": "object",
+      "properties": {
+        "trace": {
+          "$ref": "#/$defs/TraceSummary"
+        },
+        "spans": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TraceSpan"
+          }
+        }
+      },
+      "required": [
+        "trace",
+        "spans"
+      ],
+      "additionalProperties": false
+    },
+    "AlertIngest": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "source_event_id": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "environment_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "service_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "source",
+        "source_event_id",
+        "project_id",
+        "environment_id",
+        "service_ids",
+        "severity",
+        "title",
+        "started_at"
+      ],
+      "additionalProperties": false
+    },
+    "DeploymentIngest": {
+      "type": "object",
+      "properties": {
+        "source_event_id": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "environment_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "service_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "version": {
+          "type": "string"
+        },
+        "commit_sha": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "deployed_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "started",
+            "succeeded",
+            "failed",
+            "rolled_back"
+          ]
+        },
+        "source": {
+          "type": "string"
+        },
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "source_event_id",
+        "project_id",
+        "environment_id",
+        "service_id",
+        "version",
+        "deployed_at",
+        "status",
+        "source"
+      ],
+      "additionalProperties": false
+    },
+    "IngestAck": {
+      "type": "object",
+      "properties": {
+        "accepted": {
+          "type": "boolean"
+        },
+        "deduplicated": {
+          "type": "boolean"
+        },
+        "resource_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "accepted",
+        "deduplicated",
+        "resource_id"
+      ],
+      "additionalProperties": false
+    },
+    "Settings": {
+      "type": "object",
+      "properties": {
+        "timezone": {
+          "type": "string",
+          "enum": [
+            "UTC"
+          ]
+        },
+        "agent_budget": {
+          "$ref": "#/$defs/ExecutionBudget"
+        },
+        "environment": {
+          "type": "string"
+        },
+        "readonly_agent": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "timezone",
+        "agent_budget",
+        "environment",
+        "readonly_agent"
+      ],
+      "additionalProperties": false,
+      "description": "All shown fields read-only in MVP; no PATCH unless controllable settings approved"
+    },
+    "ListEnvelope": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "next_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "UsersPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/User"
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "next_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "ProjectsPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Project"
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "next_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "EnvironmentsPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Environment"
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "next_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "ServicesPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Service"
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "next_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "DeploymentsPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Deployment"
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "next_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "IncidentsPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Incident"
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "next_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "InvestigationsPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Investigation"
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "next_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "HypothesesPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Hypothesis"
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "next_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "EvidenceItemsPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "next_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "TimelinePage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TimelineEntry"
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "next_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "ReviewsPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Review"
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "next_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "EventsPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/InvestigationEvent"
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "next_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "IntegrationsPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Integration"
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "next_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "TracesPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TraceSummary"
+          }
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "next_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "UserCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "email",
+        "role",
+        "project_ids"
+      ],
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email"
+        },
+        "display_name": {
+          "type": "string",
+          "maxLength": 150
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "admin",
+            "developer",
+            "viewer"
+          ]
+        },
+        "project_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      }
+    },
+    "UserPatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "display_name": {
+          "type": "string",
+          "maxLength": 150
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "admin",
+            "developer",
+            "viewer"
+          ]
+        },
+        "project_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "is_active": {
+          "type": "boolean"
+        }
+      }
+    },
+    "IntegrationPatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "credential": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "IncidentContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "incident",
+        "services",
+        "deployments",
+        "window"
+      ],
+      "properties": {
+        "incident": {
+          "$ref": "#/$defs/Incident"
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Service"
+          }
+        },
+        "deployments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Deployment"
+          }
+        },
+        "window": {
+          "type": "object",
+          "required": [
+            "from",
+            "to"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "to": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        }
+      }
+    },
+    "CallbackAck": {
+      "type": "object",
+      "required": [
+        "accepted",
+        "deduplicated"
+      ],
+      "properties": {
+        "accepted": {
+          "type": "boolean"
+        },
+        "deduplicated": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "AlertmanagerAlert": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "firing",
+            "resolved"
+          ]
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "startsAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "endsAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "fingerprint": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "labels",
+        "startsAt",
+        "fingerprint"
+      ],
+      "additionalProperties": false
+    },
+    "AlertmanagerWebhook": {
+      "type": "object",
+      "properties": {
+        "receiver": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "firing",
+            "resolved"
+          ]
+        },
+        "groupKey": {
+          "type": "string"
+        },
+        "alerts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AlertmanagerAlert"
+          }
+        }
+      },
+      "required": [
+        "receiver",
+        "status",
+        "alerts"
+      ],
+      "additionalProperties": false
+    },
+    "AlertmanagerAck": {
+      "type": "object",
+      "properties": {
+        "accepted_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "deduplicated_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "incident_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "required": [
+        "accepted_count",
+        "deduplicated_count",
+        "incident_ids"
+      ],
+      "additionalProperties": false
+    },
+    "LoginChallenge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "challenge_id",
+        "delivery_status",
+        "masked_email",
+        "expires_in",
+        "resend_after"
+      ],
+      "properties": {
+        "challenge_id": {
+          "type": "string",
+          "pattern": "^ch_[A-Za-z0-9_-]{20,120}$",
+          "description": "Opaque high-entropy one-time login challenge identifier; not a JWT."
+        },
+        "delivery_status": {
+          "type": "string",
+          "enum": [
+            "queued"
+          ],
+          "description": "Email delivery accepted for asynchronous processing; not proof of delivery."
+        },
+        "masked_email": {
+          "type": "string",
+          "maxLength": 254,
+          "description": "Partially masked verified email, displayed only after valid credentials."
+        },
+        "expires_in": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300,
+          "description": "Seconds until the currently issued OTP expires."
+        },
+        "resend_after": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3600,
+          "description": "Minimum seconds until resend is allowed."
+        }
+      }
+    },
+    "OtpVerifyRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "challenge_id",
+        "code"
+      ],
+      "properties": {
+        "challenge_id": {
+          "type": "string",
+          "pattern": "^ch_[A-Za-z0-9_-]{20,120}$",
+          "description": "Opaque high-entropy one-time login challenge identifier; not a JWT."
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[0-9]{6}$",
+          "description": "Six decimal digits. Leading zeros are significant; never parse as integer."
+        }
+      }
+    },
+    "OtpResendRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "challenge_id"
+      ],
+      "properties": {
+        "challenge_id": {
+          "type": "string",
+          "pattern": "^ch_[A-Za-z0-9_-]{20,120}$",
+          "description": "Opaque high-entropy one-time login challenge identifier; not a JWT."
+        }
+      }
+    },
+    "OtpResendResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "challenge_id",
+        "delivery_status",
+        "expires_in",
+        "resend_after"
+      ],
+      "properties": {
+        "challenge_id": {
+          "type": "string",
+          "pattern": "^ch_[A-Za-z0-9_-]{20,120}$",
+          "description": "Opaque high-entropy one-time login challenge identifier; not a JWT."
+        },
+        "delivery_status": {
+          "type": "string",
+          "enum": [
+            "queued"
+          ]
+        },
+        "expires_in": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300
+        },
+        "resend_after": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3600
+        }
+      }
+    },
+    "OtpProblemCode": {
+      "type": "string",
+      "enum": [
+        "invalid_credentials",
+        "otp_invalid",
+        "otp_expired",
+        "otp_rate_limited",
+        "otp_delivery_unavailable",
+        "otp_challenge_invalid",
+        "validation_error"
+      ]
+    },
+    "WSTicketAck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expires_in"
+      ],
+      "properties": {
+        "expires_in": {
+          "type": "integer",
+          "const": 30
+        }
+      }
+    }
+  },
+  "title": "DeploymentIngest",
+  "type": "object",
+  "properties": {
+    "source_event_id": {
+      "type": "string"
+    },
+    "project_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "environment_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "service_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "version": {
+      "type": "string"
+    },
+    "commit_sha": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "deployed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC, RFC3339 timestamp"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "started",
+        "succeeded",
+        "failed",
+        "rolled_back"
+      ]
+    },
+    "source": {
+      "type": "string"
+    },
+    "source_url": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "source_event_id",
+    "project_id",
+    "environment_id",
+    "service_id",
+    "version",
+    "deployed_at",
+    "status",
+    "source"
+  ],
+  "additionalProperties": false
+}

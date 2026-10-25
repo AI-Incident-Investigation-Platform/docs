@@ -1,0 +1,24 @@
+{
+  "status": "ok",
+  "summary": "3 matching log records in payment-service",
+  "source_refs": [
+    {
+      "source_type": "loki",
+      "source_id": "stream/payment-service/2026-10-25T12:35:10Z",
+      "observed_at": "2026-10-25T12:35:10Z",
+      "metadata": {
+        "namespace": "apps",
+        "app": "payment-service"
+      }
+    }
+  ],
+  "items": [
+    {
+      "timestamp": "2026-10-25T12:35:10Z",
+      "message": "connection acquisition timeout",
+      "level": "ERROR"
+    }
+  ],
+  "truncated": false,
+  "error": null
+}

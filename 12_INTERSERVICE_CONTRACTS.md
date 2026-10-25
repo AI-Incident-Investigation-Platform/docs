@@ -1,6 +1,6 @@
 # 12. Межсервисные контракты — единая рабочая спецификация
 
-> **Назначение:** однозначная граница между Расулом (Frontend), Юрием (Main Backend), Олегом (AI Backend) и Даниилом (Infra/Demo). **Статус: engineering baseline v2, предлагаемый для принятия командой.** Это не утверждение, что существующие OpenAPI/JSON Schema из архивного `v0.2-draft` уже изменены или что все методы реализованы. После принятия базиса схемы должны быть синхронизированы с этой страницей и покрыты contract tests. До этого нельзя называть их production v1.
+> **Назначение:** однозначная граница между Расулом (Frontend), Юрием (Main Backend), Олегом (AI Backend) и Даниилом (Infra/Demo). **Статус: engineering baseline v3 (предложен, не принят командой).** Это не утверждение, что существующие OpenAPI/JSON Schema из архивного `v0.2-draft` уже изменены или что все методы реализованы. После принятия базиса схемы должны быть синхронизированы с этой страницей и покрыты contract tests. До этого нельзя называть их production v1.
 
 ## 1. Владельцы и транспорт — одно решение на границу
 
@@ -202,6 +202,8 @@ Authorization: Bearer <access>
   "investigation_id":"22222222-2222-4222-8222-222222222222",
   "incident_id":"11111111-1111-4111-8111-111111111111",
   "status":"inconclusive",
+  "event_id":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "finished_at":"2026-10-25T12:40:00Z",
   "report":{
     "id":"88888888-8888-4888-8888-888888888888",
     "incident_id":"11111111-1111-4111-8111-111111111111",
@@ -273,3 +275,10 @@ Every query, websocket subscription, ingest binding and command must enforce **p
 4. Before integration run a shared fixture suite: happy start, busy, cancel race, duplicate callback, out-of-order event, missing result, cross-project forbidden, missing logs/inconclusive, login OTP.
 5. Never alter just this Markdown and leave machine schemas out of sync. CI contract tests must fail on divergence.
 6. Where this document adds keys absent from old v0.2 schema (e.g. `cancel_requested`, auth `ws-ticket`), label as **baseline v2 extension** and update schema before implementation. Existing v0.2 is source material, not already-ready implementation of this revision.
+
+
+## 9. Машинные контракты v3 (добавлены в этот репозиторий)
+
+Markdown определяет поведение, но **не подменяет схемы**. Источник для генерации типов и contract tests: [contracts/README.md](contracts/README.md). Public, AI private и Main callbacks разнесены по разным OpenAPI. Результат callback **обязательно включает** `event_id` и `finished_at` согласно [схеме](contracts/schemas/ai-result-callback.schema.json). `auth/otp/verify` отдаёт refresh **только** в HttpOnly cookie; `source_type=loki`; Kubernetes инструменты называются `get_pod_status` и `get_pod_events`. Данные `Ground Truth` от Даниила не входят во вход агента.
+
+Все новые элементы v3 требуют согласованного обновления провайдеров и клиентов; наличие файлов в docs не означает, что реальные сервисы уже переключились на эти DTO.

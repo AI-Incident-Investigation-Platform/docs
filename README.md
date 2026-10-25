@@ -1,8 +1,19 @@
 # AI Incident Investigator — документация продукта и технический baseline
 
-**Редакция:** `product-perspectives/2.0` · 25 октября 2026. **Язык:** русский. **Статус:** рабочая спецификация для общего инженерного ревью; не равна реализованному production коду. Источник — архив API Contracts v0.2, текущие Figma/UI и repo-практики команды. **Что изменилось в v2:** вместо поверхностных описаний Frontend, Backend и AI добавлены реальные контракты, модели данных, runtime и интеграционная схема.
+**Редакция:** `product-perspectives/3.0-proposed` · 25 октября 2026. **Язык:** русский. **Статус:** рабочая спецификация для общего инженерного ревью; не равна реализованному production коду. Источник — архив API Contracts v0.2, текущие Figma/UI и repo-практики команды. **Что было изменено в v2:** вместо поверхностных описаний Frontend, Backend и AI добавлены реальные контракты, модели данных, runtime и интеграционная схема.
 
 > **Кратко о продукте:** инженер видит технический Incident, запускает AI Investigation, получает Evidence из логов/метрик/трейсов/Git/deployments, проверяет гипотезы и RCA, затем подтверждает/корректирует результат. AI не исправляет production автоматически.
+
+
+## Контракты для разработки — не только Markdown
+
+**[contracts/README.md](contracts/README.md)** — главное место для разработчиков API и Codex. В каталоге находятся три отдельных OpenAPI (публичный Main, приватный AI, приватные AI callbacks), валидируемые JSON Schema WebSocket/MCP/ingestion, каталог read-only инструментов, проверенные JSON-примеры и локальная проверка `python contracts/tests/validate_contracts.py`.
+
+**Для codegen:** Расул берёт `contracts/openapi/main-public.openapi.yaml` и `contracts/schemas/websocket.schema.json`; Юрий — public/callbacks OpenAPI; Олег — `ai-internal.openapi.yaml`, `main-callbacks.openapi.yaml` и `mcp/tool-catalog.json`. Не переносить старые кандидаты REST/gRPC и `Elasticsearch` из архивов.
+
+**Совместимость:** изменения v3 — **предложение для согласования**, не автоматически внедрённый API. Перед заменой DTO в реальном коде каждый владелец выполняет consumer/provider contract tests из [матрицы](contracts/CONTRACT_MATRIX.md).
+
+**Фактическое имя документа 08:** `08_INFRA_AND_DEMO.md`. В старой ветке GitHub файл ошибочно назывался `08_INFRA_AND_DEMO 1.md`; после применения пакета старое имя нужно удалить (см. `APPLY_TO_REPO.md`).
 
 ## 1. Навигация: читать не всё сразу
 

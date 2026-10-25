@@ -1,0 +1,389 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "Incident": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "environment_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "service_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "investigating",
+            "awaiting_review",
+            "resolved"
+          ]
+        },
+        "source": {
+          "type": "string"
+        },
+        "detected_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        },
+        "resolved_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "latest_investigation_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "alert_fingerprint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "project_id",
+        "environment_id",
+        "service_ids",
+        "severity",
+        "status",
+        "source",
+        "detected_at",
+        "created_at",
+        "updated_at"
+      ],
+      "additionalProperties": false
+    },
+    "InvestigationEvent": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "enum": [
+            "1.0"
+          ]
+        },
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "investigation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "incident_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "investigation.pending",
+            "investigation.started",
+            "investigation.progress",
+            "tool.started",
+            "tool.completed",
+            "tool.failed",
+            "hypothesis.updated",
+            "evidence.added",
+            "investigation.completed",
+            "investigation.inconclusive",
+            "investigation.failed",
+            "investigation.timed_out",
+            "investigation.canceled"
+          ]
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, RFC3339 timestamp"
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "investigation_id",
+        "incident_id",
+        "sequence",
+        "type",
+        "occurred_at",
+        "data"
+      ],
+      "additionalProperties": false,
+      "description": "Canonical event envelope. The detailed discriminated payloads are in schemas/ai-events.schema.json"
+    },
+    "SubscribeInvestigation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "topic",
+        "subscription_id",
+        "investigation_id",
+        "after_sequence"
+      ],
+      "properties": {
+        "action": {
+          "const": "subscribe"
+        },
+        "topic": {
+          "const": "investigation"
+        },
+        "subscription_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "investigation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "after_sequence": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "SubscribeProject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "topic",
+        "subscription_id",
+        "project_id"
+      ],
+      "properties": {
+        "action": {
+          "const": "subscribe"
+        },
+        "topic": {
+          "const": "project"
+        },
+        "subscription_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "project_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    },
+    "Unsubscribe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "subscription_id"
+      ],
+      "properties": {
+        "action": {
+          "const": "unsubscribe"
+        },
+        "subscription_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      }
+    },
+    "SubscriptionAck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "subscription_id",
+        "investigation_id",
+        "last_sequence"
+      ],
+      "properties": {
+        "type": {
+          "const": "subscription.ack"
+        },
+        "subscription_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "investigation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "last_sequence": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "SubscriptionError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "subscription_id",
+        "error"
+      ],
+      "properties": {
+        "type": {
+          "const": "subscription.error"
+        },
+        "subscription_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "message"
+          ],
+          "properties": {
+            "code": {
+              "type": "string",
+              "minLength": 1
+            },
+            "message": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "Heartbeat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "occurred_at"
+      ],
+      "properties": {
+        "type": {
+          "const": "heartbeat"
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "IncidentNotice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "event_id",
+        "project_id",
+        "occurred_at",
+        "incident"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "incident.created",
+            "incident.updated"
+          ]
+        },
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "project_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "incident": {
+          "$ref": "#/$defs/Incident"
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/SubscribeInvestigation"
+    },
+    {
+      "$ref": "#/$defs/SubscribeProject"
+    },
+    {
+      "$ref": "#/$defs/Unsubscribe"
+    },
+    {
+      "$ref": "#/$defs/SubscriptionAck"
+    },
+    {
+      "$ref": "#/$defs/SubscriptionError"
+    },
+    {
+      "$ref": "#/$defs/Heartbeat"
+    },
+    {
+      "$ref": "#/$defs/InvestigationEvent"
+    },
+    {
+      "$ref": "#/$defs/IncidentNotice"
+    }
+  ]
+}

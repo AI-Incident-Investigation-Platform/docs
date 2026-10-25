@@ -1,0 +1,7 @@
+{
+  "action": "subscribe",
+  "subscription_id": "sub-001",
+  "investigation_id": "22222222-2222-4222-8222-222222222222",
+  "after_sequence": 12,
+  "topic": "investigation"
+}

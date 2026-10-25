@@ -52,3 +52,8 @@
 `openapi/main-backend.openapi.yaml`, `openapi/ai-backend-rest-candidate.openapi.yaml` (переименовать после принятия), `schemas/domain.schema.json`, `schemas/ai-events.schema.json`, `schemas/ai-result-callback.schema.json`, `schemas/websocket.schema.json`, `mcp/tool-catalog.json`, `schemas/mcp-results.schema.json`, example fixtures. Нельзя считать эти старые файлы соответствующими v2 только из-за этой Markdown-редакции.
 
 Для реализации команды сначала согласовывают §12, затем выполняют PR по схемам и контрактным тестам. Готовый пакет перспективы продукта (`00–03`, `07`, `10`) остаётся полезным и сохраняется без переписывания продуктовых намерений.
+
+
+## 6. Canonical v3 contract files (предлагаемые)
+
+[Контрактный пакет](contracts/README.md) добавлен поверх `v0.2-draft` и `v2` Markdown, а не вместо продуктовых источников. Нормативный путь после командного approval — `contracts/openapi/`, `contracts/schemas/`, `contracts/mcp/`, `contracts/examples/`; OpenAPI отделяет public от private callbacks. Бизнес-правила `Incident ≠ Investigation ≠ Review`, дедупликация, source evidence и ограничения требуют дополнительных тестов в коде. Таблица границ — [CONTRACT_MATRIX.md](contracts/CONTRACT_MATRIX.md).

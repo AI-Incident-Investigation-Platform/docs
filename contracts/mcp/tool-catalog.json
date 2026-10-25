@@ -1,0 +1,2931 @@
+{
+  "schema_version": "1.0-proposed",
+  "transport": "MCP Streamable HTTP (not custom per-tool REST endpoints)",
+  "ownership": "Internal AI-owned MCP Server; read-only service authenticated and scoped by Main validated project/environment",
+  "tool_result_contract": {
+    "type": "object",
+    "required": [
+      "status",
+      "summary",
+      "source_refs",
+      "items",
+      "truncated"
+    ],
+    "properties": {
+      "status": {
+        "type": "string",
+        "enum": [
+          "ok",
+          "empty",
+          "partial",
+          "error"
+        ]
+      },
+      "summary": {
+        "type": "string"
+      },
+      "source_refs": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/SourceLink"
+        }
+      },
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      },
+      "truncated": {
+        "type": "boolean"
+      },
+      "error": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "additionalProperties": false
+  },
+  "$defs": {
+    "SourceLink": {
+      "type": "object",
+      "properties": {
+        "source_type": {
+          "type": "string",
+          "enum": [
+            "loki",
+            "prometheus",
+            "tempo",
+            "github",
+            "kubernetes",
+            "deployment",
+            "healthcheck",
+            "manual",
+            "docs_rag",
+            "incident_memory"
+          ]
+        },
+        "source_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri"
+        },
+        "observed_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean",
+              "null"
+            ]
+          }
+        }
+      },
+      "required": [
+        "source_type"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "tools": {
+    "search_logs": {
+      "phase": "MVP",
+      "source": "Loki",
+      "purpose": "Scoped literal/text-filter logs search; backend composes LogQL with enforced tenant/project/service selectors",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "environment_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "service_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "from": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC, RFC3339 timestamp"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC, RFC3339 timestamp"
+          },
+          "query": {
+            "type": "string",
+            "maxLength": 1500,
+            "description": "Plain text filter, NOT arbitrary LogQL; LogQL formed server side from permitted labels"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "trace_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "project_id",
+          "environment_id",
+          "service_ids",
+          "from",
+          "to",
+          "query",
+          "limit"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "empty",
+              "partial",
+              "error"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/SourceLink"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "timestamp": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "service_name": {
+                  "type": "string"
+                },
+                "level": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "trace_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "log_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "timestamp",
+                "service_name",
+                "level",
+                "message"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "status",
+          "summary",
+          "source_refs",
+          "items",
+          "truncated"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "SourceLink": {
+            "type": "object",
+            "properties": {
+              "source_type": {
+                "type": "string",
+                "enum": [
+                  "loki",
+                  "prometheus",
+                  "tempo",
+                  "github",
+                  "docker",
+                  "deployment",
+                  "healthcheck",
+                  "manual",
+                  "docs_rag",
+                  "incident_memory"
+                ]
+              },
+              "source_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "url": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uri"
+              },
+              "observed_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "metadata": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "source_type"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "description": "Source refs are actual Loki stream labels/timestamp/record IDs, never fabricated"
+      }
+    },
+    "query_prometheus": {
+      "phase": "MVP",
+      "source": "Prometheus/Grafana",
+      "purpose": "Execute ONLY predefined metric template (query_id) with enforced scoped service labels, no user or model supplied raw PromQL",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "environment_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "from": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC, RFC3339 timestamp"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC, RFC3339 timestamp"
+          },
+          "step_seconds": {
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 3600
+          },
+          "max_series": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "query_id": {
+            "type": "string",
+            "enum": [
+              "http_5xx_rate",
+              "http_p95_latency",
+              "http_request_rate",
+              "db_pool_checked_out",
+              "db_pool_timeouts",
+              "pod_restarts",
+              "service_up"
+            ],
+            "description": "Server-side allowlisted PromQL template only; unmapped metrics return controlled error"
+          },
+          "service_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "minItems": 1,
+            "maxItems": 20
+          }
+        },
+        "required": [
+          "project_id",
+          "environment_id",
+          "query_id",
+          "from",
+          "to",
+          "step_seconds",
+          "max_series",
+          "service_ids"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "empty",
+              "partial",
+              "error"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/SourceLink"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "labels": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "points": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "at": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "value": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "at",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "labels",
+                "points"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "status",
+          "summary",
+          "source_refs",
+          "items",
+          "truncated"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "SourceLink": {
+            "type": "object",
+            "properties": {
+              "source_type": {
+                "type": "string",
+                "enum": [
+                  "loki",
+                  "prometheus",
+                  "tempo",
+                  "github",
+                  "docker",
+                  "deployment",
+                  "healthcheck",
+                  "manual",
+                  "docs_rag",
+                  "incident_memory"
+                ]
+              },
+              "source_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "url": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uri"
+              },
+              "observed_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "metadata": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "source_type"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    "get_trace": {
+      "phase": "MVP",
+      "source": "Tempo",
+      "purpose": "Чтение ограниченного trace/spans по trace_id",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "environment_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "trace_id": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "project_id",
+          "environment_id",
+          "trace_id"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "empty",
+              "partial",
+              "error"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/SourceLink"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "span_id": {
+                  "type": "string"
+                },
+                "parent_span_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "operation": {
+                  "type": "string"
+                },
+                "service_name": {
+                  "type": "string"
+                },
+                "duration_ms": {
+                  "type": "number"
+                },
+                "started_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              },
+              "required": [
+                "span_id",
+                "operation",
+                "service_name",
+                "duration_ms",
+                "started_at"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "status",
+          "summary",
+          "source_refs",
+          "items",
+          "truncated"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "SourceLink": {
+            "type": "object",
+            "properties": {
+              "source_type": {
+                "type": "string",
+                "enum": [
+                  "loki",
+                  "prometheus",
+                  "tempo",
+                  "github",
+                  "docker",
+                  "deployment",
+                  "healthcheck",
+                  "manual",
+                  "docs_rag",
+                  "incident_memory"
+                ]
+              },
+              "source_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "url": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uri"
+              },
+              "observed_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "metadata": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "source_type"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    "get_service_health": {
+      "phase": "MVP",
+      "source": "Prometheus/health",
+      "purpose": "Получить статус/ошибки/latency сервиса по настроенной интеграции",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "environment_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "service_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "project_id",
+          "environment_id",
+          "service_id"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "empty",
+              "partial",
+              "error"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/SourceLink"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "service_name": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "healthy",
+                    "degraded",
+                    "critical",
+                    "unknown"
+                  ]
+                },
+                "error_rate": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "latency_p95_ms": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "service_name",
+                "status"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "status",
+          "summary",
+          "source_refs",
+          "items",
+          "truncated"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "SourceLink": {
+            "type": "object",
+            "properties": {
+              "source_type": {
+                "type": "string",
+                "enum": [
+                  "loki",
+                  "prometheus",
+                  "tempo",
+                  "github",
+                  "docker",
+                  "deployment",
+                  "healthcheck",
+                  "manual",
+                  "docs_rag",
+                  "incident_memory"
+                ]
+              },
+              "source_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "url": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uri"
+              },
+              "observed_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "metadata": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "source_type"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    "get_recent_deployments": {
+      "phase": "MVP",
+      "source": "Main Backend deployment registry",
+      "purpose": "История релизов в выбранном временном окне",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "environment_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "service_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "from": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC, RFC3339 timestamp"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC, RFC3339 timestamp"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        "required": [
+          "project_id",
+          "environment_id",
+          "service_id",
+          "from",
+          "to"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "empty",
+              "partial",
+              "error"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/SourceLink"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "version": {
+                  "type": "string"
+                },
+                "commit_sha": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "deployed_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "service_name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "version",
+                "deployed_at",
+                "status",
+                "service_name"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "status",
+          "summary",
+          "source_refs",
+          "items",
+          "truncated"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "SourceLink": {
+            "type": "object",
+            "properties": {
+              "source_type": {
+                "type": "string",
+                "enum": [
+                  "loki",
+                  "prometheus",
+                  "tempo",
+                  "github",
+                  "docker",
+                  "deployment",
+                  "healthcheck",
+                  "manual",
+                  "docs_rag",
+                  "incident_memory"
+                ]
+              },
+              "source_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "url": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uri"
+              },
+              "observed_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "metadata": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "source_type"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    "github_search_code": {
+      "phase": "MVP",
+      "source": "GitHub",
+      "purpose": "Read-only поиск по allowlisted репозиториям в project scope",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "query": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 250
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30
+          }
+        },
+        "required": [
+          "project_id",
+          "query"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "empty",
+              "partial",
+              "error"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/SourceLink"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "repository": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "line": {
+                  "type": "integer"
+                },
+                "snippet": {
+                  "type": "string"
+                },
+                "ref": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "repository",
+                "path",
+                "snippet"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "status",
+          "summary",
+          "source_refs",
+          "items",
+          "truncated"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "SourceLink": {
+            "type": "object",
+            "properties": {
+              "source_type": {
+                "type": "string",
+                "enum": [
+                  "loki",
+                  "prometheus",
+                  "tempo",
+                  "github",
+                  "docker",
+                  "deployment",
+                  "healthcheck",
+                  "manual",
+                  "docs_rag",
+                  "incident_memory"
+                ]
+              },
+              "source_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "url": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uri"
+              },
+              "observed_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "metadata": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "source_type"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    "github_get_file": {
+      "phase": "MVP",
+      "source": "GitHub",
+      "purpose": "Read-only файл по repo/path/ref; секреты и бинарники не отдавать",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "repository": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "max_bytes": {
+            "type": "integer",
+            "minimum": 1024,
+            "maximum": 100000
+          }
+        },
+        "required": [
+          "project_id",
+          "repository",
+          "path",
+          "ref"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "empty",
+              "partial",
+              "error"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/SourceLink"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "repository": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "ref": {
+                  "type": "string"
+                },
+                "content_excerpt": {
+                  "type": "string"
+                },
+                "truncated": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "repository",
+                "path",
+                "ref",
+                "content_excerpt",
+                "truncated"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "status",
+          "summary",
+          "source_refs",
+          "items",
+          "truncated"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "SourceLink": {
+            "type": "object",
+            "properties": {
+              "source_type": {
+                "type": "string",
+                "enum": [
+                  "loki",
+                  "prometheus",
+                  "tempo",
+                  "github",
+                  "docker",
+                  "deployment",
+                  "healthcheck",
+                  "manual",
+                  "docs_rag",
+                  "incident_memory"
+                ]
+              },
+              "source_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "url": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uri"
+              },
+              "observed_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "metadata": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "source_type"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    "github_get_commit": {
+      "phase": "MVP",
+      "source": "GitHub",
+      "purpose": "Read-only commit metadata и changed files",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "repository": {
+            "type": "string"
+          },
+          "sha": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "repository",
+          "sha"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "empty",
+              "partial",
+              "error"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/SourceLink"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "repository": {
+                  "type": "string"
+                },
+                "sha": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "author_date": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "changed_paths": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "repository",
+                "sha",
+                "message",
+                "author_date"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "status",
+          "summary",
+          "source_refs",
+          "items",
+          "truncated"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "SourceLink": {
+            "type": "object",
+            "properties": {
+              "source_type": {
+                "type": "string",
+                "enum": [
+                  "loki",
+                  "prometheus",
+                  "tempo",
+                  "github",
+                  "docker",
+                  "deployment",
+                  "healthcheck",
+                  "manual",
+                  "docs_rag",
+                  "incident_memory"
+                ]
+              },
+              "source_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "url": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uri"
+              },
+              "observed_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "metadata": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "source_type"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    "github_compare_commits": {
+      "phase": "MVP",
+      "source": "GitHub",
+      "purpose": "Read-only diff с лимитами объёма и количества файлов",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "repository": {
+            "type": "string"
+          },
+          "base": {
+            "type": "string"
+          },
+          "head": {
+            "type": "string"
+          },
+          "max_files": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "project_id",
+          "repository",
+          "base",
+          "head"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "empty",
+              "partial",
+              "error"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/SourceLink"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "repository": {
+                  "type": "string"
+                },
+                "base": {
+                  "type": "string"
+                },
+                "head": {
+                  "type": "string"
+                },
+                "file_path": {
+                  "type": "string"
+                },
+                "patch_excerpt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "repository",
+                "base",
+                "head",
+                "file_path",
+                "patch_excerpt"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "status",
+          "summary",
+          "source_refs",
+          "items",
+          "truncated"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "SourceLink": {
+            "type": "object",
+            "properties": {
+              "source_type": {
+                "type": "string",
+                "enum": [
+                  "loki",
+                  "prometheus",
+                  "tempo",
+                  "github",
+                  "docker",
+                  "deployment",
+                  "healthcheck",
+                  "manual",
+                  "docs_rag",
+                  "incident_memory"
+                ]
+              },
+              "source_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "url": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uri"
+              },
+              "observed_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "metadata": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "source_type"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    "github_get_blame": {
+      "phase": "MVP",
+      "source": "GitHub",
+      "purpose": "История строк файла / blame, если API допускает",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "repository": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "start_line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "end_line": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "project_id",
+          "repository",
+          "path",
+          "ref",
+          "start_line",
+          "end_line"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "empty",
+              "partial",
+              "error"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/SourceLink"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "line_start": {
+                  "type": "integer"
+                },
+                "line_end": {
+                  "type": "integer"
+                },
+                "commit_sha": {
+                  "type": "string"
+                },
+                "author": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "line_start",
+                "line_end",
+                "commit_sha"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "status",
+          "summary",
+          "source_refs",
+          "items",
+          "truncated"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "SourceLink": {
+            "type": "object",
+            "properties": {
+              "source_type": {
+                "type": "string",
+                "enum": [
+                  "loki",
+                  "prometheus",
+                  "tempo",
+                  "github",
+                  "docker",
+                  "deployment",
+                  "healthcheck",
+                  "manual",
+                  "docs_rag",
+                  "incident_memory"
+                ]
+              },
+              "source_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "url": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uri"
+              },
+              "observed_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "metadata": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "source_type"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    "http_health_check": {
+      "phase": "MVP",
+      "source": "Allowlisted HTTP GET/HEAD",
+      "purpose": "Безопасная проверка зарегистрированного healthcheck endpoint",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "environment_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "service_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "GET",
+              "HEAD"
+            ]
+          }
+        },
+        "required": [
+          "project_id",
+          "environment_id",
+          "service_id",
+          "method"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "empty",
+              "partial",
+              "error"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/SourceLink"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "service_name": {
+                  "type": "string"
+                },
+                "method": {
+                  "type": "string",
+                  "enum": [
+                    "GET",
+                    "HEAD"
+                  ]
+                },
+                "status_code": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "latency_ms": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "service_name",
+                "method"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "status",
+          "summary",
+          "source_refs",
+          "items",
+          "truncated"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "SourceLink": {
+            "type": "object",
+            "properties": {
+              "source_type": {
+                "type": "string",
+                "enum": [
+                  "loki",
+                  "prometheus",
+                  "tempo",
+                  "github",
+                  "docker",
+                  "deployment",
+                  "healthcheck",
+                  "manual",
+                  "docs_rag",
+                  "incident_memory"
+                ]
+              },
+              "source_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "url": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uri"
+              },
+              "observed_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "metadata": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "source_type"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    "get_incident_context": {
+      "phase": "MVP",
+      "source": "Main Backend",
+      "purpose": "Начальная нормализованная сводка инцидента, без секретов",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "incident_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "investigation_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "incident_id",
+          "investigation_id"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "empty",
+              "partial",
+              "error"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/SourceLink"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "incident_id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "alert_summary": {
+                  "type": "string"
+                },
+                "affected_services": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "incident_id",
+                "title",
+                "affected_services"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "status",
+          "summary",
+          "source_refs",
+          "items",
+          "truncated"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "SourceLink": {
+            "type": "object",
+            "properties": {
+              "source_type": {
+                "type": "string",
+                "enum": [
+                  "loki",
+                  "prometheus",
+                  "tempo",
+                  "github",
+                  "docker",
+                  "deployment",
+                  "healthcheck",
+                  "manual",
+                  "docs_rag",
+                  "incident_memory"
+                ]
+              },
+              "source_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "url": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uri"
+              },
+              "observed_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "metadata": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "source_type"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    "search_docs": {
+      "phase": "P2",
+      "source": "Qdrant",
+      "purpose": "RAG по проектной документации с указанием происхождения",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "query": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          }
+        },
+        "required": [
+          "project_id",
+          "query"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "empty",
+              "partial",
+              "error"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/SourceLink"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "section": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "excerpt": {
+                  "type": "string"
+                },
+                "score": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "path",
+                "excerpt"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "status",
+          "summary",
+          "source_refs",
+          "items",
+          "truncated"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "SourceLink": {
+            "type": "object",
+            "properties": {
+              "source_type": {
+                "type": "string",
+                "enum": [
+                  "loki",
+                  "prometheus",
+                  "tempo",
+                  "github",
+                  "docker",
+                  "deployment",
+                  "healthcheck",
+                  "manual",
+                  "docs_rag",
+                  "incident_memory"
+                ]
+              },
+              "source_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "url": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uri"
+              },
+              "observed_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "metadata": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "source_type"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    "search_similar_incidents": {
+      "phase": "P2",
+      "source": "Qdrant + PostgreSQL",
+      "purpose": "Semantic Incident Memory, выдача ссылок на реальные прошлые incidents",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "query": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          }
+        },
+        "required": [
+          "project_id",
+          "query"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "empty",
+              "partial",
+              "error"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/SourceLink"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "incident_id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "summary": {
+                  "type": "string"
+                },
+                "score": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "incident_id",
+                "summary"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "status",
+          "summary",
+          "source_refs",
+          "items",
+          "truncated"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "SourceLink": {
+            "type": "object",
+            "properties": {
+              "source_type": {
+                "type": "string",
+                "enum": [
+                  "loki",
+                  "prometheus",
+                  "tempo",
+                  "github",
+                  "docker",
+                  "deployment",
+                  "healthcheck",
+                  "manual",
+                  "docs_rag",
+                  "incident_memory"
+                ]
+              },
+              "source_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "url": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uri"
+              },
+              "observed_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "metadata": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "source_type"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    "get_pod_status": {
+      "phase": "MVP",
+      "source": "Kubernetes read-only API",
+      "purpose": "Read-only inspect pod/containerа: state, restart_count, memory, oom; read-only K8s API adapter, not unrestricted Kubernetes API; canonical name for Kubernetes",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "environment_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "service_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "project_id",
+          "environment_id",
+          "service_id"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "empty",
+              "partial",
+              "error"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/SourceLink"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "service_name": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": "string"
+                },
+                "restart_count": {
+                  "type": "integer"
+                },
+                "oom_killed": {
+                  "type": "boolean"
+                },
+                "memory_usage_bytes": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "namespace": {
+                  "type": "string"
+                },
+                "pod_name": {
+                  "type": "string"
+                },
+                "observed_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              },
+              "required": [
+                "service_name",
+                "state",
+                "restart_count",
+                "oom_killed"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "status",
+          "summary",
+          "source_refs",
+          "items",
+          "truncated"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "SourceLink": {
+            "type": "object",
+            "properties": {
+              "source_type": {
+                "type": "string",
+                "enum": [
+                  "loki",
+                  "prometheus",
+                  "tempo",
+                  "github",
+                  "docker",
+                  "deployment",
+                  "healthcheck",
+                  "manual",
+                  "docs_rag",
+                  "incident_memory"
+                ]
+              },
+              "source_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "url": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uri"
+              },
+              "observed_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "metadata": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "source_type"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    "get_pod_events": {
+      "phase": "MVP",
+      "source": "Kubernetes read-only API",
+      "purpose": "Read-only события stop/start/oom/restart в ограниченном диапазоне; read-only K8s API adapter, not unrestricted Kubernetes API; canonical name for Kubernetes",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "environment_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "service_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "from": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC, RFC3339 timestamp"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC, RFC3339 timestamp"
+          }
+        },
+        "required": [
+          "project_id",
+          "environment_id",
+          "service_id",
+          "from",
+          "to"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "empty",
+              "partial",
+              "error"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/SourceLink"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string"
+                },
+                "occurred_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "service_name": {
+                  "type": "string"
+                },
+                "detail": {
+                  "type": "string"
+                },
+                "namespace": {
+                  "type": "string"
+                },
+                "pod_name": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "observed_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              },
+              "required": [
+                "type",
+                "occurred_at",
+                "service_name"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "required": [
+          "status",
+          "summary",
+          "source_refs",
+          "items",
+          "truncated"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "SourceLink": {
+            "type": "object",
+            "properties": {
+              "source_type": {
+                "type": "string",
+                "enum": [
+                  "loki",
+                  "prometheus",
+                  "tempo",
+                  "github",
+                  "docker",
+                  "deployment",
+                  "healthcheck",
+                  "manual",
+                  "docs_rag",
+                  "incident_memory"
+                ]
+              },
+              "source_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "url": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uri"
+              },
+              "observed_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "metadata": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "source_type"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    }
+  },
+  "security": {
+    "allowlist_only": true,
+    "scope_from_service_identity": true,
+    "forbid_raw_promql_logql_arbitrary_shell": true,
+    "max_tool_calls_per_investigation": 40,
+    "max_results_per_tool": 100,
+    "max_response_bytes": 262144
+  }
+}

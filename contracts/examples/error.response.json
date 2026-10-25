@@ -1,0 +1,10 @@
+{
+  "error": {
+    "code": "integration_unavailable",
+    "message": "Temporary source failure",
+    "request_id": "9d14486d-dc8b-470a-b77a-c7e3b527f1e0",
+    "details": {
+      "source_type": "loki"
+    }
+  }
+}

@@ -138,3 +138,8 @@ Viewer читает только разрешённые проекты; Develope
 6. Нет прямых запросов к AI/MCP/сервисным секретам.
 
 **Передача от Backend:** public OpenAPI/fixtures; для каждого маршрута error example; WS message fixtures; тестовая учётная запись разных ролей в DEMO (не production secrets); URL dev gateway. **Со стороны Frontend:** типизированный SDK, UI tests и E2E сценарий из [13_INTEGRATION_AND_HANDOFF.md](13_INTEGRATION_AND_HANDOFF.md).
+
+
+## 11. Канонический SDK и WS schema
+
+Типы REST генерируются из [main-public.openapi.yaml](contracts/openapi/main-public.openapi.yaml), а не путём копирования полей из prose; WebSocket envelope соответствует [schemas/websocket.schema.json](contracts/schemas/websocket.schema.json). Алгоритм replay и Auth-cookie handshake описан в [WEBSOCKET.md](contracts/WEBSOCKET.md), OTP/refresh — в [AUTH_BOUNDARY.md](contracts/AUTH_BOUNDARY.md). Запрещено принимать `status=completed` в UI до появления сохранённого `report`, а также перескакивать gaps в sequence.

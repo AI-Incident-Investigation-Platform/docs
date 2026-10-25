@@ -133,3 +133,14 @@ Auth repository: отвечает за OTP/password/tokens/session, но пуб�
 2. Обновить machine schemas старого v0.2, добавив internal REST выбранного транспорта, Loki tools, OTP refresh cookie/WS ticket.
 3. Выдать Юрию `B-01–B-05`, Расулу auth+Incident/Live UI на fixtures, Олегу AI-02/03 (после интеграции AI-01), Даниилу payment-service PAY-01 и telemetry.
 4. Подписать минимум event/result JSON fixtures и запустить Stage B без ожидания готовности UI.
+
+
+## 9. Конкретные машинные файлы передачи v3
+
+- Юрий → Расул: [main-public OpenAPI](contracts/openapi/main-public.openapi.yaml) + [WebSocket schema](contracts/schemas/websocket.schema.json) + [WS protocol](contracts/WEBSOCKET.md).
+- Юрий ↔ владелец Auth: [Auth boundary](contracts/AUTH_BOUNDARY.md) + refresh cookie, JWKS issuer/audience и membership tests.
+- Олег ↔ Юрий: [AI internal OpenAPI](contracts/openapi/ai-internal.openapi.yaml), [Main callbacks OpenAPI](contracts/openapi/main-callbacks.openapi.yaml), `contracts/schemas/ai-*`, fixtures.
+- Олег ↔ Даниил: [MCP tool catalog](contracts/mcp/tool-catalog.json) + [MCP telemetry map](contracts/MCP_AND_TELEMETRY.md).
+- Юрий ↔ Даниил: [Ingestion](contracts/INGESTION.md), mapping project/environment/service и signed ingest fixture.
+
+Каждый владелец должен запустить `python contracts/tests/validate_contracts.py` и provider/consumer проверки своего API; schema-only PASS не является E2E PASS.

@@ -122,3 +122,15 @@ Human review/approval:
 ## 7. Минимальные измерения качества AI
 
 На каждом воспроизводимом fault записывать: scenario ID, model/prompt version, количество runs, tool call success, schema-valid reports, citations valid/total, correct root-cause vs symptom, inconclusive rates, latency, budgets, failure reason. Не объявлять модель «95% accurate» на одной демонстрации. Проверка с fake scripted model отдельно от live Qwen.
+
+
+## 8. Машинная проверка контрактов v3
+
+В репозитории docs из корня:
+
+```bash
+python -m pip install 'pyyaml>=6' 'jsonschema[format]>=4.22'
+python contracts/tests/validate_contracts.py
+```
+
+Проверяем: ссылки, структуры JSON/OpenAPI, типы событий и результат `event_id`+`finished_at`, актуальные Loki/Kubernetes source types, Refresh через cookie, наличие `ws-ticket`. Результат здесь проверяет **документацию**, а не живые сервисы. Для реальной приёмки обязателен Main↔AI callback replay, WS reconnect, инцидентный auth/scope, управляемые сценарии Demo Payment Service. См. [contracts/CONTRACT_MATRIX.md](contracts/CONTRACT_MATRIX.md).

@@ -1,106 +1,109 @@
-# 09. Сквозная картина — что происходит и кто что делает
+# 09. Сквозное исполнение — технические sequence-сценарии
 
-**Перспектива:** один инцидент одновременно глазами пользователя, UI, Main Backend, AI и инфраструктуры.
+Этот файл предназначен для совместной отладки. Он не заменяет [12 — wire contracts](12_INTERSERVICE_CONTRACTS.md), а привязывает их к времени, транзакциям, HTTP кодам и состояниям. Владелец каждого перехода: [13 — handoff](13_INTEGRATION_AND_HANDOFF.md).
 
-## 1. Главный пользовательский путь
-
-**Сценарий:** в демонстрационном `payment-service` появились ошибки HTTP 500 после изменения поведения сервиса. Инженер пытается понять их причину.
+## 1. Happy path: fault → Incident → run → RCA → review
 
 ```mermaid
 sequenceDiagram
- participant D as Demo Payment Service
- participant M as Мониторинг / Alertmanager
- participant B as Main Backend
- participant U as Frontend / Инженер
- participant A as AI Backend
- participant T as MCP / Источники
- D->>M: Ошибки, метрики, traces
- M->>B: Signed alert
- B->>B: Normalize + dedupe + Incident
- B-->>U: Incident created / UI update
- U->>B: Start investigation
- B->>A: Internal Start (async)
- A-->>B: Accepted / run_id
- B-->>U: Investigation accepted
- loop До достаточных данных или бюджета
-  A->>T: Read-only tool call
-  T-->>A: Observations + source_refs
-  A->>A: Evidence + hypotheses + checkpoint
-  A-->>B: Progress event
-  B->>B: Persist event
-  B-->>U: WebSocket event
- end
- A-->>B: RCA completed / inconclusive
- B->>B: Persist report
- B-->>U: New report available
- U->>B: Human review
- B->>B: Persist review (без изменения AI RCA)
+  participant D as Demo/Monitoring
+  participant U as Browser
+  participant M as Main Backend+PG
+  participant A as AI Backend+PG
+  participant T as MCP Server/Sources
+  D->>M: POST /api/v1/ingest/alertmanager (scoped, verified)
+  M->>M: validate + dedup + Incident COMMIT
+  M-->>U: project incident.created WS (after commit)
+  U->>M: GET /incidents/{id}
+  U->>M: POST /incidents/{id}/investigations + Idempotency-Key
+  M->>M: create pending run + dispatch outbox COMMIT
+  M-->>U: 202 Investigation + Location
+  M->>A: POST /internal/v1/investigations (same run UUID)
+  A->>A: durable admission COMMIT
+  A-->>M: 202 accepted
+  loop Each bounded diagnostic step
+    A->>T: MCP tools/call (read-only, scoped)
+    T-->>A: observed sources, source IDs
+    A->>A: validation + Evidence + checkpoint + event outbox
+    A->>M: POST /internal/v1/ai/events
+    M->>M: event COMMIT+dedup
+    M-->>A: 202
+    M-->>U: WS event (after commit)
+  end
+  A->>A: validated RCA + terminal result COMMIT
+  A->>M: POST /internal/v1/ai/results
+  M->>M: Evidence+RCA+status+outbox COMMIT
+  M-->>A: 202 ack
+  M-->>U: WS investigation.completed
+  U->>M: GET /investigations/{id}/report
+  U->>M: POST /incidents/{id}/reviews
+  M->>M: Review audit COMMIT
 ```
 
-Диаграмма описывает **целевой** workflow. Детали wire-протокола Main↔AI задаёт актуализированный контракт, а не эта схема.
+### Transaction boundaries
 
-## 2. Одна история по шагам
+- **T1 Main:** Incident + alert link + outbox; без транзакции недопустим WS `incident.created`.
+- **T2 Main:** run metadata `pending` + dispatch job; 202 browser после commit, не после ответа LLM.
+- **T3 AI:** durable registry accepted; 202 internal после commit.
+- **T4 AI:** Evidence/checkpoint и callback outbox; не терять event при restart.
+- **T5 Main:** event insert/upsert + projection; 202 ack после commit.
+- **T6 AI:** final report + terminal status + outbox; возможен readback.
+- **T7 Main:** validate + Evidence/Hypothesis/Timeline/RCA + terminal status **одной транзакцией**, потом terminal WS.
+- **T8 Main:** human Review + audit; Incident resolved только отдельным ручным действием.
 
-| Время | Что произошло | Где остаётся факт | Что видит человек |
+## 2. Ошибка AI busy
+
+Main сохранит `pending` и dispatch job, AI на Start ответит `429 Retry-After: 5`. Dispatcher retry того же ID после backoff. Browser получит корректный `pending`, а не 500 или бесконечный spinner. По bounded admission deadline Main явно закроет попытку `failed`, сохранив failure_code и события. Нельзя создавать новый run ID на каждом retry Start.
+
+## 3. WebSocket упал в середине
+
+1. Browser последний раз применил seq=10, WS disconnect. AI продолжает.
+2. Main persist seq=11,12,13 и terminal result в DB; отсутствие браузера не важно.
+3. Browser после reconnect `GET run`, `GET events?after_sequence=10`, применяет 11–13 и получает report, затем подписывается на WS с `after_sequence=13`.
+4. Если получил WS seq=15 до REST seq=14, буферизует 15; не считает дырку допустимой.
+5. Дубль seq=13 от WS отбрасывает по `(run,sequence)`.
+
+## 4. AI crash и недоставленный RCA
+
+1. AI успел закоммитить `ai_results` и `ai_outbox`, но упал до callback.
+2. При рестарте runner видит terminal result, delivery worker повторяет callback с тем же ID/status.
+3. Дополнительно Main reconciliation делает `GET /internal/v1/investigations/{id}/result` и импортирует независимо от callback.
+4. Если callback и readback пришли одновременно, unique investigation report + idempotent transaction создаёт только один набор Evidence/RCA, Main отвечает deduplicated.
+5. Если AI упал до результата, lease истекает, executor возобновляет из LangGraph checkpoint **только если safe**; иначе фиксирует failed, не оставляет forever running.
+
+## 5. Cancel одновременно с completion
+
+- Main записывает `cancel_requested` и отправляет command.
+- AI перед следующим шагом видит отмену и готовит `canceled`, но в это время completion может успеть закоммититься.
+- Побеждает **первая принятая терминальная транзакция**, другая не меняет run, регистрируется конфликт.
+- UI показывает `cancel requested` до появления terminal; не обещает мгновенно остановить уже завершённый tool request.
+- Retry всегда новый investigation UUID.
+
+## 6. Inconclusive — не инфраструктурный failure
+
+При недоступных логах и лишь кратком сигнале «5xx» AI может вернуть валидный `inconclusive`, `root_cause=null`, limitations. Main сохраняет report и переводит Incident в `awaiting_review`; UI показывает «Недостаточно доказательств», даёт доступ к частичным Evidence и Review. Не выдумывать RCA из названия fault сценария.
+
+## 7. Один реально проверяемый end-to-end сценарий для команды
+
+**Предусловия:** k3d ready, payment service healthy, test project/environment/service mapping, Main/AI internal auth, MCP с Loki/Prometheus/Tempo, браузер Developer/Viewer.
+
+| № | Исполнитель | Действие | Что проверить |
 |---|---|---|---|
-| T0 | Виртуальные платежи работают | PG платежного сервиса, telemetry | Healthy baseline в Grafana |
-| T1 | Демо-сбой вызывает ошибки | Loki, Prometheus, Tempo | Рост HTTP 5xx и задержки |
-| T2 | Alertmanager обнаруживает порог | Alert payload | Новый Incident в Overview |
-| T3 | Backend нормализует, дедуплицирует | Incident DB | `INC-...` со статусом Open |
-| T4 | Инженер запускает Investigation | Investigation registry | `running`, live status |
-| T5 | AI читает logs/metrics/traces | MCP results → Evidence | записи tool calls, факты |
-| T6 | AI обновляет hypotheses | Run state + events | Hypotheses, confidence, links |
-| T7 | AI формирует RCA / inconclusive | RCA в Main Backend | RCA report + limitations |
-| T8 | Инженер подтверждает/исправляет | Review/audit | Review status |
-| T9 | Инженер исправляет неисправность | внешняя среда | После подтверждения — Resolved |
+| 1 | Даниил | здоровый payment traffic | baseline HTTP 2xx, source telemetry |
+| 2 | Даниил | включить `psp_timeout`, ограниченный TTL | реальные provider timeout spans/errors |
+| 3 | Юрий | принять Alertmanager webhook (либо manual Incident) | один incident UUID, dedup |
+| 4 | Расул | открыть Incident/Start | 202 pending with stable ID |
+| 5 | Юрий | dispatch Start to AI | 202 admission; no RabbitMQ |
+| 6 | Олег | запустить LangGraph/MCP диагностические reads | valid source refs; no secret leaks |
+| 7 | Юрий+Расул | events GET/WS, искусственный reconnect | contiguous replay, no dup |
+| 8 | Олег+Юрий | terminal report callback | RCA/evidence atomically persisted |
+| 9 | Расул | Review confirmed/corrected | original report unchanged |
+| 10 | Даниил | отключить fault, healthy traffic | telemetry normalization/recovery |
+| 11 | QA | compare evaluator ground truth | evidence-backed diagnosis, no hints |
 
-**T1/T2/T3 не гарантируют фиксированную разницу во времени.** Система не должна выдумывать точные timestamps ради красивой демонстрации.
+**Definition of Done:** каждый шаг реально пройден со ссылками на тестовые артефакты; unit/fake model success нельзя называть живым E2E. Проверки отказов перечислены в [14](14_ACCEPTANCE_AND_CONTRACT_TESTS.md).
 
-## 3. Кто отвечает за действие
 
-| Действие | Frontend (Расул) | Backend (Юрий) | AI (Олег) | Infra/demo (Даниил) |
-|---|---|---|---|---|
-| Создать технический сбой | показывает последствия | принимает alert | пока ничего | **реализует demo scenario** |
-| Регистрация инцидента | показывает | **создаёт / хранит** | не участвует | источник сигналов |
-| Start Investigation | инициирует | **проверяет и маршрутизирует** | **исполняет** | готовность источников |
-| Tool calls | визуализирует | обеспечивает разрешённый контекст/интеграцию | **выбирает и вызывает** | telemetry/endpoints |
-| Сохранение событий | отображает | **пишет в БД, раздаёт WS** | публикует | — |
-| Evidence/RCA | показывает / раскрывает | **хранит и выдаёт** | **формирует** | поставляет реальные данные |
-| Review | интерфейс | **валидирует и хранит** | не исправляет свой отчет | — |
-| Исправление сбоя | может показывать статус | сохраняет статус Incident | только предлагает | восстанавливает демосреду |
+## 8. Проверяемые схемы для данного сценария
 
-Точная физическая принадлежность MCP Server — отдельная архитектурная граница; функционально он предоставляет **read-only source adapters** и контроль scope.
-
-## 4. Три исхода одного расследования
-
-### A. Удалось установить вероятную причину
-
-AI видит реальные признаки насыщения пула: ошибки ожидания DB connection, рост времени ответа и корреляцию с конкретным изменением. Он возвращает `completed`, указывает root cause с evidence references, confidence не выше того, что оправдано источниками. Человек может подтвердить.
-
-### B. Данных недостаточно
-
-Есть только алерт «HTTP 500», а логи недоступны, запрос метрик завершился ошибкой. AI возвращает `inconclusive`, перечисляет ограничения, не делает категорический вывод. UI показывает состояние как полноценный исход работы, не как «LLM не справилась».
-
-### C. Инструмент или модель недоступны
-
-Результат вызова инструмента может быть `error/partial/truncated`; в событиях видно, что произошло. Если восстановить нельзя, run завершается `failed` или `timed_out` с историей. WebSocket-разрыв отдельно не останавливает AI.
-
-## 5. Чего нельзя делать ради демонстрации
-
-- Вшивать в prompt агента строку `root_cause=db_pool_exhaustion`.
-- Создавать link на несуществующий лог/trace/commit.
-- Генерировать `completed` только потому, что прошёл фиксированный таймер.
-- Считать «AI сказал правильно» доказательством корректного инструментального расследования.
-- Автоматически переключать Incident в Resolved после генерации текста.
-
-## 6. Минимальный демонстрационный приёмочный проход
-
-1. Запущены Frontend, Main Backend, AI Backend и логически доступные инструменты.
-2. `payment-service` генерирует здоровый baseline и контролируемый fault.
-3. Webhook рождает Incident один раз даже при повторе.
-4. Engineer нажимает Start, видит живые tool events и получает реальные Evidence.
-5. Agent выводит RCA/`inconclusive` в схеме, Main Backend сохраняет его.
-6. После обрыва WebSocket UI догружает события.
-7. Инженер подтверждает/корректирует RCA; исправление/восстановление выполняется отдельно.
-
-См. [MVP](10_SCOPE_AND_ACCEPTANCE.md).
+Public Start и Review → [Public API](contracts/openapi/main-public.openapi.yaml); durable acceptance and GET result → [AI API](contracts/openapi/ai-internal.openapi.yaml); progress/result callback → [Main callbacks](contracts/openapi/main-callbacks.openapi.yaml); WS replay → [WebSocket](contracts/WEBSOCKET.md); наблюдения → [MCP](contracts/MCP_AND_TELEMETRY.md). Проверять нужно всю последовательность, а не только отдельно валидный JSON.

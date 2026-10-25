@@ -164,3 +164,8 @@ Backend хранит `integration` с `type`, endpoint (validated), project/envi
 ### Что передать команде
 
 **Расулу:** versioned public OpenAPI + sample fixtures + test accounts roles + error/WS samples. **Олегу:** service auth credentials via secret config, internal REST schemas, event/result validators and shared fixtures. **Даниилу:** alert webhook contract, service mapping and telemetry labels, bounded test endpoints. См. [13_INTEGRATION_AND_HANDOFF.md](13_INTEGRATION_AND_HANDOFF.md).
+
+
+## 12. Что выдать другим командам в виде точных файлов
+
+Public API: [main-public OpenAPI](contracts/openapi/main-public.openapi.yaml); private result/event/context sink: [main-callbacks OpenAPI](contracts/openapi/main-callbacks.openapi.yaml); client AI: [ai-internal OpenAPI](contracts/openapi/ai-internal.openapi.yaml). Auth/JWKS/project scope см. [Auth boundary](contracts/AUTH_BOUNDARY.md); Ingestion — [INGESTION.md](contracts/INGESTION.md). Уточнённый Result Callback требует `event_id`, `finished_at`, terminal immutability и atomic persistence. Provider tests сверяют real Pydantic responses с машинными схемами; Markdown — не отдельный конкурирующий wire-contract.

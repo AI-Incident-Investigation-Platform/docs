@@ -135,7 +135,7 @@ flowchart TD
 | `http_health_check` | Allowlisted target | service-mapped URL only | response status/latency, no arbitrary URL |
 | `get_incident_context` | Main internal | incident_id scoped by signed run | current Incident metadata |
 
-**`get_container_status`, `get_container_events` из исходного каталога**: текущий production-like стенд основан на k3d, а не единственном Docker socket. Не дать LLM прямой Docker socket; согласовать restricted Kubernetes read-only adapter (pod status/restarts/events), сохранив согласованные tool names через schema migration; до него явно `not_supported`, не фальсифицировать Docker results. В `v0.2` `search_logs` ссылался на Elasticsearch: для фактического `infra` используем **Loki adapter** и обновлённый tool catalog, потому что соответствие имени инструмента не означает совместимость старых query schemas.
+**`get_pod_status`, `get_pod_events` — новые канонические имена вместо старых Docker-based tools**: текущий production-like стенд основан на k3d, а не единственном Docker socket. Не дать LLM прямой Docker socket; согласовать restricted Kubernetes read-only adapter (pod status/restarts/events), после явного обновления tool names и provider/consumer tests; до него явно `not_supported`, не фальсифицировать Docker results. В `v0.2` `search_logs` ссылался на Elasticsearch: для фактического `infra` используем **Loki adapter** и обновлённый tool catalog, потому что соответствие имени инструмента не означает совместимость старых query schemas.
 
 ### Унифицированный наблюдаемый результат
 
@@ -250,3 +250,8 @@ Demo Payment Service Даниила генерирует повторяемые 
 7. Contract/unit/integration/eval тесты проходят, реальный live smoke отделён от fake.
 
 **Передача Юрию:** internal REST OpenAPI + callbacks fixtures + service identity spec + 429/recovery tests. **Передача Даниилу:** каталог supported Loki/Prometheus/Tempo labels and source IDs. **Передача Расулу:** никаких прямых AI endpoints, весь live идёт через Main.
+
+
+## 15. Wire-файлы для реализации, а не предположение по тексту
+
+AI реализует [внутренний REST](contracts/openapi/ai-internal.openapi.yaml), отправляет события/результаты по [Main callbacks](contracts/openapi/main-callbacks.openapi.yaml), использует [tool-catalog](contracts/mcp/tool-catalog.json) и [MCP telemetry mapping](contracts/MCP_AND_TELEMETRY.md). Пример конечного результата обязан включать `event_id` и `finished_at`. Никаких утверждений об успешном E2E только из schema validation; реальные тесты нужны с fake MCP, а затем Loki/Prom/Tempo.

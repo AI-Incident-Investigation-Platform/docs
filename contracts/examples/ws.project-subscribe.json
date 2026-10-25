@@ -1,0 +1,6 @@
+{
+  "action": "subscribe",
+  "topic": "project",
+  "subscription_id": "proj-001",
+  "project_id": "55555555-5555-4555-8555-555555555555"
+}
