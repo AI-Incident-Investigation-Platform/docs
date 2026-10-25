@@ -27,7 +27,7 @@
 | **05** | **[MAIN BACKEND TECHNICAL](05_BACKEND.md)** | **БД, RBAC, ingestion, REST, durable dispatch, callbacks, WS** | **Юрий** |
 | **06** | **[AI AGENT TECHNICAL](06_AI_AGENT.md)** | **LangGraph, LLM, MCP, evidence, PG checkpoints, runtime** | **Олег** |
 | 07 | [CUSTOMER](07_CUSTOMER.md) | Как оценивает полезность заказчик | PM / заказчик |
-| **08** | **[INFRA + DEMO](08_INFRA_AND_DEMO.md)** | **k3d, Prom/Loki/Tempo, payment scenarios, telemetry labels** | **Даниил** |
+| **08** | **[INFRA + DEMO](08_INFRA_AND_DEMO.md)** | **k3d, Prom/Loki/Tempo, payment scenarios, telemetry labels** | **Юра/Даниил** |
 | **09** | **[END TO END](09_END_TO_END.md)** | **Полная HTTP/DB/WS последовательность и recovery** | **Все** |
 | 10 | [MVP/ACCEPTANCE](10_SCOPE_AND_ACCEPTANCE.md) | Что входит в MVP, что не входит | Все |
 | **11** | **[SOURCES/DECISIONS](11_SOURCES_AND_DECISIONS.md)** | **Что известно, что выбрано в v2 и что пока не реализовано** | **Все** |
