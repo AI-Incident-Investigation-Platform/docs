@@ -1,49 +1,90 @@
-# Contracts v3 — исполнимые контракты AI Incident Investigator
+# Contracts
 
-**Статус:** `proposed-v3`, 25 октября 2026. Основано на [техническом baseline v2](../12_INTERSERVICE_CONTRACTS.md) и исходном архиве `API Contracts v0.2`; **не свидетельствует о согласовании или реализации сервисами**. После командного ревью можно зафиксировать версии и начать codegen. Ни один контракт не меняется односторонне.
+Навигация по контрактам AI Incident Investigator.
 
-## Что открыть для своего сервиса
+## Файлы в корне
 
-| Разработчик | Источник запросов и ответов | Семантика, интеграция |
-|---|---|---|
-| Расул / Frontend | [Public OpenAPI](openapi/main-public.openapi.yaml), [WebSocket schema](schemas/websocket.schema.json) | [Frontend](../04_FRONTEND.md), [WS protocol](WEBSOCKET.md) |
-| Юрий / Main Backend | [Public OpenAPI](openapi/main-public.openapi.yaml), [Callbacks OpenAPI](openapi/main-callbacks.openapi.yaml), [AI OpenAPI](openapi/ai-internal.openapi.yaml) | [Backend](../05_BACKEND.md), [contracts semantics](../12_INTERSERVICE_CONTRACTS.md) |
-| Олег / AI Backend | [AI internal OpenAPI](openapi/ai-internal.openapi.yaml), [Callbacks OpenAPI](openapi/main-callbacks.openapi.yaml), [MCP catalog](mcp/tool-catalog.json) | [AI agent](../06_AI_AGENT.md), [MCP rules](MCP_AND_TELEMETRY.md) |
-| Даниил / Infra | [Ingestion guide](INGESTION.md), [MCP + Telemetry](MCP_AND_TELEMETRY.md) | [Infra](../08_INFRA_AND_DEMO.md), demo runbook |
-| Авторизация | [Public OpenAPI](openapi/main-public.openapi.yaml), [Auth boundary](AUTH_BOUNDARY.md) | Login → OTP → session, claims и project membership |
+| Файл | Содержание |
+| --- | --- |
+| [AUTH_BOUNDARY.md](AUTH_BOUNDARY.md) | Границы ответственности Auth Service, Main Backend и браузера; поток Login/OTP, refresh и WebSocket-аутентификация. |
+| [CONTRACT_MATRIX.md](CONTRACT_MATRIX.md) | Матрица границ между сервисами: provider, consumer, спецификация и обязательные интеграционные проверки. |
+| [INGESTION.md](INGESTION.md) | Правила приёма alerts, Alertmanager webhooks и сведений о deployments. |
+| [MCP_AND_TELEMETRY.md](MCP_AND_TELEMETRY.md) | Источники телеметрии, доступные AI через MCP, и ограничения на их использование. |
+| [WEBSOCKET.md](WEBSOCKET.md) | Протокол `/ws/v1/events`: аутентификация, подписки, порядок событий, replay и обработка ошибок. |
 
-## Канонические файлы
+## Директории
 
-- `openapi/main-public.openapi.yaml` — только `/api/v1/*`; браузер не видит `/internal`.
-- `openapi/ai-internal.openapi.yaml` — Main → AI, private REST, 202 durable admission, 429 busy.
-- `openapi/main-callbacks.openapi.yaml` — AI → Main, private events/results/context.
-- `schemas/*.schema.json` — проверяемые payload (Start, Event, RCA, Result, WS, OTP, ingestion, MCP). Бизнес-инварианты, требующие БД и source ownership, проверяются отдельно, **не** одной JSON Schema.
-- `mcp/tool-catalog.json` — зарегистрированные read-only инструменты; имена `get_pod_*` являются canonical для k3d, Docker aliases удалены.
-- `examples/*.json` — синтетические **валидируемые** примеры; ссылки на реальные наблюдения нужны во время E2E.
-- `tests/validate_contracts.py` — проверка JSON, схем, `$ref`, известных примеров, ссылок Markdown и несовместимых имен.
+### [openapi/](openapi/)
 
-## Как проверять
+OpenAPI-спецификации HTTP API.
 
-Из корня `docs`:
+| Файл | Содержание |
+| --- | --- |
+| [ai-internal.openapi.yaml](openapi/ai-internal.openapi.yaml) | Внутреннее REST API Main Backend → AI Backend. |
+| [main-callbacks.openapi.yaml](openapi/main-callbacks.openapi.yaml) | Внутренние callbacks AI Backend → Main Backend: события, результаты и контекст. |
+| [main-public.openapi.yaml](openapi/main-public.openapi.yaml) | Публичное REST API Main Backend: аутентификация, проекты, инциденты, расследования и review. |
+
+### [schemas/](schemas/)
+
+JSON Schema для сообщений и доменных объектов.
+
+| Файл | Содержание |
+| --- | --- |
+| [ai-events.schema.json](schemas/ai-events.schema.json) | События расследования от AI. |
+| [ai-result-callback.schema.json](schemas/ai-result-callback.schema.json) | Callback с результатом AI-расследования. |
+| [ai-start-request.schema.json](schemas/ai-start-request.schema.json) | Запрос Main Backend на запуск AI-расследования. |
+| [alert-ingest.schema.json](schemas/alert-ingest.schema.json) | Нормализованный входящий alert. |
+| [alertmanager-webhook.schema.json](schemas/alertmanager-webhook.schema.json) | Webhook Alertmanager. |
+| [auth-tokens.schema.json](schemas/auth-tokens.schema.json) | Ответ с access-токеном и параметрами сессии. |
+| [deployment-ingest.schema.json](schemas/deployment-ingest.schema.json) | Событие deployment для ingestion. |
+| [domain.schema.json](schemas/domain.schema.json) | Общие доменные определения, используемые другими схемами. |
+| [email-otp.schema.json](schemas/email-otp.schema.json) | Payload для login и подтверждения OTP. |
+| [mcp-results.schema.json](schemas/mcp-results.schema.json) | Общий envelope результата MCP-инструмента. |
+| [rca-report.schema.json](schemas/rca-report.schema.json) | Отчёт root-cause analysis. |
+| [websocket.schema.json](schemas/websocket.schema.json) | Клиентские и серверные сообщения WebSocket. |
+
+### [examples/](examples/)
+
+Валидируемые примеры запросов, ответов и событий.
+
+| Файл | Содержание |
+| --- | --- |
+| [ai-event.tool-completed.json](examples/ai-event.tool-completed.json) | Событие завершения AI-инструмента. |
+| [ai-result.callback.json](examples/ai-result.callback.json) | Callback с результатом расследования. |
+| [ai-start.request.json](examples/ai-start.request.json) | Запрос на запуск AI-расследования. |
+| [alertmanager.request.json](examples/alertmanager.request.json) | Входящий webhook Alertmanager. |
+| [auth-login.challenge.response.json](examples/auth-login.challenge.response.json) | Ответ на login с OTP challenge. |
+| [auth-login.request.json](examples/auth-login.request.json) | Запрос login по email и паролю. |
+| [auth-otp-resend.request.json](examples/auth-otp-resend.request.json) | Запрос повторной отправки OTP. |
+| [auth-otp-resend.response.json](examples/auth-otp-resend.response.json) | Ответ на повторную отправку OTP. |
+| [auth-otp-verify.request.json](examples/auth-otp-verify.request.json) | Запрос подтверждения OTP. |
+| [auth.tokens.response.json](examples/auth.tokens.response.json) | Ответ с access-токеном после аутентификации. |
+| [auth.ws-ticket.response.json](examples/auth.ws-ticket.response.json) | Ответ с параметрами WebSocket ticket. |
+| [error.response.json](examples/error.response.json) | Стандартный публичный envelope ошибки. |
+| [mcp.search-logs.output.json](examples/mcp.search-logs.output.json) | Результат MCP-инструмента поиска логов. |
+| [rca-report.json](examples/rca-report.json) | RCA-отчёт. |
+| [review.request.json](examples/review.request.json) | Запрос human review расследования. |
+| [ws.incident-updated.json](examples/ws.incident-updated.json) | WebSocket-событие обновления инцидента. |
+| [ws.project-subscribe.json](examples/ws.project-subscribe.json) | Подписка на события проекта через WebSocket. |
+| [ws.subscribe.json](examples/ws.subscribe.json) | Подписка на события расследования через WebSocket. |
+| [ws.subscription-ack.json](examples/ws.subscription-ack.json) | Подтверждение WebSocket-подписки. |
+
+### [mcp/](mcp/)
+
+| Файл | Содержание |
+| --- | --- |
+| [tool-catalog.json](mcp/tool-catalog.json) | Каталог разрешённых read-only MCP-инструментов и их аргументов. |
+
+### [tests/](tests/)
+
+| Файл | Содержание |
+| --- | --- |
+| [validate_contracts.py](tests/validate_contracts.py) | Проверяет JSON, JSON Schema, OpenAPI, примеры и Markdown-ссылки. |
+
+## Проверка
+
+Из корня репозитория:
 
 ```bash
-python -m pip install 'pyyaml>=6' 'jsonschema[format]>=4.22'
 python contracts/tests/validate_contracts.py
 ```
-
-`PASS` этого скрипта подтверждает **синтаксис и указанные тестовые fixtures**, а не то, что запущенные сервисы соответствуют контрактам. HTTP provider/consumer tests, state-machine tests, authorization и durable callbacks проверяются в репозиториях сервисов и на интеграционных воротах [14](../14_ACCEPTANCE_AND_CONTRACT_TESTS.md).
-
-## Правила обратной совместимости
-
-1. Изменение wire-поля = одновременное изменение `OpenAPI/JSON Schema + examples + docs + consumer/provider contract tests`.
-2. `snake_case`, идентификаторы UUID, время UTC RFC3339, сортировка events по `(investigation_id, sequence)`; nullable явно указан в schema.
-3. Во всех публичных ошибках `application/json` с `{ "error": { "code", "message", "request_id", "details"? } }`; не смешивать RFC7807 и этот envelope.
-4. `Login/OTP` не отдаёт refresh token в JSON. Только HttpOnly cookie после успешного OTP.
-5. Все источники telemetry scoped; в запросе нельзя самостоятельно подменить project scope. MCP result provenance — реальные source refs, а не LLM-generated links.
-6. Демо-инциденты не освобождают от требований `idempotency`, `review` и `inconclusive`.
-7. OpenAPI `servers` для internal имеют примерные DNS, а **реальный host задаётся конфигурацией deployment**.
-8. Любая команда перед кодогенерацией сравнивает здесь описанную схему с реально существующим API; статус `proposed` запрещает объявлять wire-формат уже deployed.
-
-## Что ещё проверяется при интеграции
-
-[Матрица границ и тестов](CONTRACT_MATRIX.md) и [интеграционный handoff](../13_INTEGRATION_AND_HANDOFF.md). Наличие схемы не делает реализованным UI, LLM, MCP, базы или отправку callback.
