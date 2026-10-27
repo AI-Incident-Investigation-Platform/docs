@@ -3,8 +3,7 @@ info:
   title: AI Incident Investigator — Main Backend Public API
   version: 1.0.0-proposed
   description: Implementation baseline v3 (PROPOSED pending team approval). Public REST only. No AI callbacks exposed
-    on public spec. Auth amended 2026-10-27 by team decision - passwordless email OTP, cookie-only session, no
-    global roles.
+    on public spec. Passwordless email OTP, cookie-only session, permissions inside a project.
 servers:
 - url: /
   description: same-origin public API behind Traefik

@@ -1,6 +1,6 @@
 # 05. Main Backend — спецификация для реализации серверной части
 
-**Ответственный за домен:** Юрий. **Архитектура:** backend — микросервисы за общим gateway (Traefik), наружу один API `/api/v1` (решение команды 27.10.2026). «Main Backend» ниже — это совокупность сервисов, а модули §2 — кандидаты в отдельные сервисы. Аутентификация — сервис `auth` (`/api/v1/auth/*`), письма — сервис `email` по RabbitMQ; схема — [AUTH_BOUNDARY](contracts/AUTH_BOUNDARY.md). **Стек реализации:** Python FastAPI, Pydantic v2, SQLAlchemy 2 Async, Alembic, PostgreSQL, httpx, OpenTelemetry. Применять существующую репозиторную архитектуру; не переносить код между репозиториями без PR. **Контракт с Frontend/AI:** [12_INTERSERVICE_CONTRACTS.md](12_INTERSERVICE_CONTRACTS.md).
+**Ответственный за домен:** Юрий. **Архитектура:** backend — микросервисы за общим gateway (Traefik), наружу один API `/api/v1`. «Main Backend» ниже — это совокупность сервисов, а модули §2 — кандидаты в отдельные сервисы. Аутентификация — сервис `auth` (`/api/v1/auth/*`), письма — сервис `email` по RabbitMQ; схема — [AUTH_BOUNDARY](contracts/AUTH_BOUNDARY.md). **Стек реализации:** Python FastAPI, Pydantic v2, SQLAlchemy 2 Async, Alembic, PostgreSQL, httpx, OpenTelemetry. Применять существующую репозиторную архитектуру; не переносить код между репозиториями без PR. **Контракт с Frontend/AI:** [12_INTERSERVICE_CONTRACTS.md](12_INTERSERVICE_CONTRACTS.md).
 
 ## 1. Что сервер обязан предоставлять
 
