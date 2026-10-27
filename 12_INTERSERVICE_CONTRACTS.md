@@ -6,14 +6,15 @@
 
 | Граница | Протокол | Источник истины | Кто реализует | Запрещено |
 |---|---|---|---|---|
-| Browser → Public API | HTTPS REST `/api/v1` | Main Backend (для `/auth/*` допускается внутренняя маршрутизация к существующему Auth service) | Юрий + владелец Auth | browser → AI/MCP/DB |
+| Browser → Public API | HTTPS REST `/api/v1` | микросервисы backend за gateway (Traefik): `/api/v1/auth/*` — сервис `auth`, остальное — профильные сервисы; наружу один API | Юрий | browser → AI/MCP/DB |
+| Auth → Email | RabbitMQ: задача «отправить письмо по шаблону» | сервис `email`, провайдер Resend | Юрий | синхронная отправка письма из `auth` |
 | Public API → Browser realtime | WebSocket `/ws/v1/events` + REST replay | Main Backend DB | Юрий, клиент Расула | хранить критическое состояние только в WS |
 | Main Backend → AI Backend | **REST JSON** `/internal/v1` | Main DB для incident/report; AI PG для исполнения | Юрий ↔ Олег | RabbitMQ, второй параллельный gRPC контракт |
 | AI Backend → Main Backend | **REST JSON callbacks** `/internal/v1/ai/*` | сначала commit в Main PG, затем WS | Олег ↔ Юрий | callback URL от модели/клиента |
 | AI → diagnostic tools | **MCP Streamable HTTP** | MCP server tool schemas | Олег; Infra поставляет источники | прямой arbitrary SQL / shell / production write |
 | MCP → telemetry | Loki API / Prometheus HTTP API / Tempo API / GitHub read-only | соответствующий источник | MCP Server + Infra | копирование всех сырых логов в Main DB |
 
-**Согласованное историческое требование:** нет RabbitMQ между Main и AI. **Выбранные здесь конкретизации:** REST, AI-owned MCP Server, Loki, auth session/ticket ниже, busy policy `429`. Они предлагаются как единый путь реализации; ответственность команды — принять эту редакцию до публичного релиза.
+**Согласованное историческое требование:** нет RabbitMQ между Main и AI (RabbitMQ используется только для писем: `auth` → `email`). **Выбранные здесь конкретизации:** REST, AI-owned MCP Server, Loki, auth session/ticket ниже, busy policy `429`. Они предлагаются как единый путь реализации; ответственность команды — принять эту редакцию до публичного релиза.
 
 ## 2. Универсальные wire-правила
 
@@ -42,21 +43,22 @@
 
 ## 3. Авторизация Browser ↔ API
 
-Обязательная цепочка **email+password → одноразовый шестизначный email OTP при каждом новом входе → access token + refresh session**.
+> Решение команды от 27.10.2026: пароля нет, вход и регистрация — одно окно по email-коду; сессия только в HttpOnly-куках; глобальных ролей нет. Подробно — [AUTH_BOUNDARY.md](contracts/AUTH_BOUNDARY.md).
+
+Цепочка **email → одноразовый шестизначный код на почту → сессия в HttpOnly-куках**. Для незарегистрированного email аккаунт создаётся при успешной проверке кода.
 
 | Метод | Путь | Request | Response |
 |---|---|---|---|
-| POST | `/api/v1/auth/login` | `{email,password}` | `202 {challenge_id,masked_email,expires_in,resend_after,delivery_status}`; **без JWT** |
-| POST | `/api/v1/auth/otp/verify` | `{challenge_id,code}` | `200 {access_token,token_type:"bearer",expires_in}` + HttpOnly refresh cookie |
-| POST | `/api/v1/auth/otp/resend` | `{challenge_id}` | `202` новый код, предыдущий недействителен |
-| POST | `/api/v1/auth/refresh` | refresh cookie + CSRF header | новый access token + rotated refresh cookie |
-| POST | `/api/v1/auth/logout` | refresh cookie + CSRF | `204`, сессия отозвана, cookie очищена |
-| GET | `/api/v1/users/me` | bearer access JWT | `{id,email,role,project_ids,...}` по schema |
-| POST | `/api/v1/auth/ws-ticket` | bearer access JWT | `200 {expires_in:30}` + одноразовый HttpOnly WS-ticket cookie |
+| POST | `/api/v1/auth/login` | `{email}` | `202 {challenge_id,masked_email,delivery_status,expires_in,resend_after}`; одинаково для известного и нового email; **кук нет** |
+| POST | `/api/v1/auth/otp/verify` | `{challenge_id,code}` | `200 {user:{id,email,created_at},account_created}` + `Set-Cookie` `access_token` и `refresh_token` |
+| POST | `/api/v1/auth/otp/resend` | `{challenge_id}` | `202`, новый код, предыдущий недействителен |
+| POST | `/api/v1/auth/refresh` | кука `refresh_token` | `204` + новые куки (ротация) |
+| POST | `/api/v1/auth/logout` | кука `refresh_token` | `204`, сессия отозвана, куки очищены |
+| GET | `/api/v1/auth/me` | кука `access_token` | `{id,email,created_at}` |
 
-**Фиксация по безопасности:** access token только в памяти браузера, refresh cookie `Secure` (в HTTPS), `HttpOnly`, `SameSite=Lax` при same-site деплое, путь `/api/v1/auth`; `CSRF` защита для cookie state-changing действий. WS ticket — одноразовый ≤30 сек и узко scoped. Сервер выставляет `aiip_ws_ticket` cookie (`Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/ws/v1/events`, `Max-Age=30`), браузер открывает WS по тому же origin, cookie прикладывается автоматически. WS сервер проверяет `Origin` allowlist, ticket одноразово consume и требует действующей session + project scope. Никаких токенов в URL или JS-readable WS ticket. Ticket выдаётся только после полного OTP flow. При локальном HTTP dev нужны отдельные dev cookie настройки и проверка origin, не отключать secure-политику на deployed HTTPS.
+**Безопасность.** Токены только в HttpOnly-куках: `access_token` (JWT 15 минут, `Path=/`) и `refresh_token` (30 дней, `Path=/api/v1/auth`), обе `Secure`, `SameSite=Strict`. В тело ответа, URL, `localStorage` и JS токены не попадают, Bearer у браузера нет. Каждый изменяющий запрос любого сервиса проверяет `Origin` по allowlist (`403 origin_forbidden`) — это CSRF-защита, отдельного CSRF-токена нет. WebSocket аутентифицируется той же кукой `access_token` с проверкой `Origin`; WS-ticket не используется.
 
-**OTP baseline:** 6 цифр строкой, TTL 300 с, 5 попыток, resend не чаще 60 с, максимум 3 resend, lifetime challenge ≤900 с. Только серверный digest, строгий rate limit, consume единожды. Auth service в отдельном `auth` репозитории может реализовывать identity и session store; Main Backend обязан сохранить **единый публичный контракт** и связать identity с `project_memberships`.
+**OTP baseline:** 6 цифр строкой, TTL 300 с, 5 попыток, resend не чаще 60 с, максимум 3 resend, lifetime challenge ≤900 с. Только серверный digest, consume единожды, лимит запросов кода по email и клиенту (`429` + `Retry-After`). Письмо с кодом отправляет сервис `email`: `auth` кладёт задачу в RabbitMQ и отвечает `202` после подтверждения брокера; брокер недоступен — `503 otp_delivery_unavailable`.
 
 ## 4. Основные публичные маршруты и владельцы
 
@@ -92,7 +94,8 @@
 
 ```http
 POST /api/v1/incidents/11111111-1111-4111-8111-111111111111/investigations
-Authorization: Bearer <access>
+Cookie: access_token=<HttpOnly, браузер прикладывает сам>
+Origin: https://<same-origin>
 Idempotency-Key: c51b5ba8-43aa-463e-95a2-d40e4c99613a
 Content-Type: application/json
 
@@ -129,7 +132,8 @@ Content-Type: application/json
 POST /api/v1/incidents/11111111-1111-4111-8111-111111111111/reviews
 Idempotency-Key: 646ee2b8-c9af-4769-b8af-61b310e0a496
 Content-Type: application/json
-Authorization: Bearer <access>
+Cookie: access_token=<HttpOnly, браузер прикладывает сам>
+Origin: https://<same-origin>
 
 {"investigation_id":"22222222-2222-4222-8222-222222222222","decision":"corrected","corrected_root_cause":"Long-running transactions exhausted pool","comment":"Confirmed via traces"}
 ```
@@ -238,7 +242,7 @@ Main commits `cancel_requested`, calls AI; AI cooperatively checks before next c
 
 ## 6. Realtime protocol Browser ↔ Main
 
-**WebSocket:** `wss://host/ws/v1/events` с одноразовым ticket в HttpOnly cookie из `/auth/ws-ticket`, без параметров токена в URL. `GET events` is authoritative for replay. Subscribe:
+**WebSocket:** `wss://host/ws/v1/events` с кукой `access_token` и проверкой `Origin`, без параметров токена в URL. `GET events` is authoritative for replay. Subscribe:
 
 ```json
 {"action":"subscribe","subscription_id":"sub-1","investigation_id":"22222222-2222-4222-8222-222222222222","after_sequence":12}
@@ -254,18 +258,25 @@ Server sends exactly the sanitized persisted `InvestigationEvent` shape from §5
 
 **Reconnect algorithm:** REST `GET investigation` and `GET events?after_sequence=last_applied`; fill gaps in ascending order; only then resubscribe to WS and merge duplicates. On gap `new.sequence > last_applied+1`, keep buffered and repeat REST backfill, never advance cursor past missing sequence. On WS loss show `reconnecting`, not `investigation.failed`.
 
-## 7. RBAC permission matrix (enforced on Main)
+## 7. Права доступа внутри проекта
 
-| Action | Viewer | Developer | Admin |
-|---|---|---|---|
-| Read own projects, incidents, analysis | yes | yes | yes |
-| Start/retry/cancel investigation | no | yes | yes |
-| Review RCA / resolve incident | no | yes | yes |
-| Create/edit project, service, environment | no | no | yes |
-| Manage integrations and credentials | no | no | yes |
-| Manage users/project membership | no | no | yes |
+Глобальных ролей (Admin / Developer / Viewer) нет. Любой пользователь может зарегистрироваться и создать проект — он его owner. Owner и участники с правом `member.manage` приглашают людей и назначают им роль — набор прав внутри этого проекта. Список прав и модель — в [AUTH_BOUNDARY.md](contracts/AUTH_BOUNDARY.md#доступ-проекты-как-организации-github).
 
-Every query, websocket subscription, ingest binding and command must enforce **project scope** from persistent server-side membership; role alone is insufficient. Return `404` for an inaccessible resource if needed to avoid existence disclosure; `403` for known, authenticated scope conflict in permitted contexts.
+| Действие | Право |
+|---|---|
+| Видеть проект, сервисы, инциденты | `project.read` |
+| Читать расследования, Evidence, RCA | `report.read` |
+| Start / retry / cancel investigation | `investigation.run` |
+| Review RCA | `review.write` |
+| Ручной инцидент, resolve / reopen | `incident.manage` |
+| Подключать репозитории | `repository.manage` |
+| Подключать коннекторы мониторинга | `integration.manage` |
+| Выпускать API-токены проекта для алертов | `api_token.manage` |
+| Приглашать участников, менять роли | `member.manage` |
+| Настройки проекта, окружения, сервисы | `project.manage` |
+| Удалить проект, передать владение | только owner |
+
+Every query, websocket subscription, ingest binding and command must enforce **project scope** from persistent server-side membership. Return `404` for a project the caller is not a member of; `403` for a member without the required permission.
 
 ## 8. Contract drift prevention
 
@@ -274,11 +285,11 @@ Every query, websocket subscription, ingest binding and command must enforce **p
 3. Pin `schema_version=1.0` for run/event/result until approved migration; changes require explicit versioned PR.
 4. Before integration run a shared fixture suite: happy start, busy, cancel race, duplicate callback, out-of-order event, missing result, cross-project forbidden, missing logs/inconclusive, login OTP.
 5. Never alter just this Markdown and leave machine schemas out of sync. CI contract tests must fail on divergence.
-6. Where this document adds keys absent from old v0.2 schema (e.g. `cancel_requested`, auth `ws-ticket`), label as **baseline v2 extension** and update schema before implementation. Existing v0.2 is source material, not already-ready implementation of this revision.
+6. Where this document adds keys absent from old v0.2 schema (e.g. `cancel_requested`), label as **baseline v2 extension** and update schema before implementation. Existing v0.2 is source material, not already-ready implementation of this revision.
 
 
 ## 9. Машинные контракты v3 (добавлены в этот репозиторий)
 
-Markdown определяет поведение, но **не подменяет схемы**. Источник для генерации типов и contract tests: [contracts/README.md](contracts/README.md). Public, AI private и Main callbacks разнесены по разным OpenAPI. Результат callback **обязательно включает** `event_id` и `finished_at` согласно [схеме](contracts/schemas/ai-result-callback.schema.json). `auth/otp/verify` отдаёт refresh **только** в HttpOnly cookie; `source_type=loki`; Kubernetes инструменты называются `get_pod_status` и `get_pod_events`. Данные `Ground Truth` от Даниила не входят во вход агента.
+Markdown определяет поведение, но **не подменяет схемы**. Источник для генерации типов и contract tests: [contracts/README.md](contracts/README.md). Public, AI private и Main callbacks разнесены по разным OpenAPI. Результат callback **обязательно включает** `event_id` и `finished_at` согласно [схеме](contracts/schemas/ai-result-callback.schema.json). `auth/otp/verify` отдаёт access и refresh **только** в HttpOnly-куках; `source_type=loki`; Kubernetes инструменты называются `get_pod_status` и `get_pod_events`. Данные `Ground Truth` от Даниила не входят во вход агента.
 
 Все новые элементы v3 требуют согласованного обновления провайдеров и клиентов; наличие файлов в docs не означает, что реальные сервисы уже переключились на эти DTO.

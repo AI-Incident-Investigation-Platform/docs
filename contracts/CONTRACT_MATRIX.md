@@ -3,8 +3,9 @@
 | Граница | Владелец provider | Consumer | Машинная спецификация | Обязательная интеграционная проверка |
 |---|---|---|---|---|
 | Browser REST → Main | Юрий | Расул | `openapi/main-public.openapi.yaml` | Login/OTP, project scope, CRUD, start/cancel/retry/review, 401/403/404/409/429 |
-| Browser WS ↔ Main | Юрий | Расул | `schemas/websocket.schema.json` | one-use ticket, subscribe, dropped WS + REST replay, gaps, RBAC |
-| Browser Login → Auth через Main | Auth owner + Юрий | Расул | Public OpenAPI + `AUTH_BOUNDARY.md` | no JWT before OTP, refresh cookie/CSRF, JWKS rotation |
+| Browser WS ↔ Main | Юрий | Расул | `schemas/websocket.schema.json` | cookie + Origin handshake, subscribe, dropped WS + REST replay, gaps, RBAC |
+| Browser Login → Auth | Юрий | Расул | Public OpenAPI + `AUTH_BOUNDARY.md` | no session before OTP, same answer for known/new email, cookie-only tokens, Origin check, JWKS rotation |
+| Auth → Email | Юрий | Юрий | `AUTH_BOUNDARY.md` | publisher confirm before 202, code not logged, expired task dropped |
 | Main Start/Cancel → AI | Олег | Юрий | `openapi/ai-internal.openapi.yaml` | 202 persisted, duplicate idempotency, 429 busy, status/result readback, cancellation |
 | AI Events/Results → Main | Юрий | Олег | `openapi/main-callbacks.openapi.yaml` + schemas | callbacks duplicate/out of order, terminal atomic commit, missing event_id rejected |
 | AI → MCP | Олег | LangGraph runtime | `mcp/tool-catalog.json` + `schemas/mcp-results.schema.json` | tools/list, tools/call, invalid scope, bounded output, no invented refs |

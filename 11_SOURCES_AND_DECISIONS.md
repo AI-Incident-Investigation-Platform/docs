@@ -13,7 +13,7 @@
 |---|---|
 | **Подтверждено исходным контекстом** | продукт, домен Incident/Investigation/Evidence/Review, No Rabbit, single ReAct, read-only, email OTP |
 | **Проверено на уровне кода/репозитория** | Qwen локально и одноузловой LangGraph smoke AI-01; k3d манифесты инфры; стартовый React каркас |
-| **Выбранный baseline v2** | REST Main↔AI, AI-owned MCP, Loki log adapter, service JWT, refresh HttpOnly cookie, ephemeral WS cookie ticket, AI busy 429, DB dispatch/outbox |
+| **Выбранный baseline v2** | REST Main↔AI, AI-owned MCP, Loki log adapter, service JWT, сессия в HttpOnly-куках, WS по той же куке, AI busy 429, DB dispatch/outbox |
 | **Не реализовано или не подтверждено** | полный MCP→RCA→Main→Frontend live E2E, PG durable run recovery, реальный продуктовый production релиз |
 
 ## 3. Зафиксированные проектные решения для единой реализации
@@ -26,8 +26,10 @@
 | V2-04 | MCP Server — отдельный внутренний read-only сервис AI workstream | 06, 08 |
 | V2-05 | Source logs = Loki, metrics = Prometheus, traces = Tempo | 06, 08 |
 | V2-06 | Main PG для Incident/Evidence/RCA/Review, AI PG для checkpoints/registry | 05, 06 |
-| V2-07 | OTP при каждом новом password login, refresh HttpOnly cookie | 04, 12 |
-| V2-08 | WS auth через 30-секундный HttpOnly cookie ticket + Origin check | 04, 12 |
+| V2-07 | Без пароля: email → OTP, одно окно входа и регистрации; access и refresh только в HttpOnly-куках (команда, 27.10.2026) | 04, 12, AUTH_BOUNDARY |
+| V2-08 | WS auth той же кукой `access_token` + Origin check, без ticket (команда, 27.10.2026) | 04, 12, WEBSOCKET |
+| V2-13 | Глобальных ролей нет: проект создаёт любой, owner + роли-наборы прав внутри проекта (команда, 27.10.2026) | 02, 12 §7, AUTH_BOUNDARY |
+| V2-14 | Backend — микросервисы за gateway, наружу один API; письма — сервис `email` через RabbitMQ и Resend (команда, 27.10.2026) | 05, 12 §1 |
 | V2-09 | AI busy отвечает 429; Main pending dispatcher retries boundedly | 05, 12 |
 | V2-10 | Result callback + GET readback, terminal WS только после DB commit | 05, 06, 12 |
 | V2-11 | 20 agent steps / 40 tool calls / 1200sec, один active executor | 06 |
@@ -41,8 +43,8 @@
 |---|---|
 | Internal REST vs gRPC candidate | один REST transport, без второго независимого gRPC API |
 | Elasticsearch `/search_logs` | Loki LogQL-backed `search_logs`, новый MCP input/output schema |
-| Browser JWT refresh в JSON | refresh только через HttpOnly cookie, access in memory |
-| WS auth не выбран | одноразовый ticket cookie с проверкой Origin |
+| Browser JWT refresh в JSON | access и refresh только в HttpOnly-куках |
+| WS auth не выбран | кука `access_token` с проверкой Origin |
 | MCP Server owner TBD | один владелец реализации на AI workstream; infra sources у Даниила |
 | AI 202 background task | только после durable admission, separate executor/registry |
 | RabbitMQ between Backend and AI | removed; RabbitMQ допустим только как fault/demo subsystem |

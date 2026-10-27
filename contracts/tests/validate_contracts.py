@@ -84,22 +84,30 @@ internal_ai = openapis.get('ai-internal.openapi.yaml', {})
 callbacks = openapis.get('main-callbacks.openapi.yaml', {})
 if any(x.startswith('/internal') for x in pub.get('paths', {})):
     fail('Internal callback routes leaked into public API')
-if '/api/v1/auth/ws-ticket' not in pub.get('paths', {}):
-    fail('Public ws-ticket endpoint missing')
+if '/api/v1/auth/ws-ticket' in pub.get('paths', {}):
+    fail('ws-ticket removed: WebSocket authenticates by the access_token cookie and Origin')
+if pub.get('security') != [{'CookieAuth': []}]:
+    fail('Public API must authenticate by the HttpOnly access_token cookie')
+if 'BearerAuth' in pub.get('components', {}).get('securitySchemes', {}):
+    fail('Browser bearer tokens are not part of the public API')
 if len(internal_ai.get('paths', {})) < 5 or len(callbacks.get('paths', {})) < 3:
     fail('Private API incomplete')
 for name, d in [('ai-internal',internal_ai), ('main-callbacks',callbacks)]:
     if d.get('security') != [{'ServiceAuth': []}]:
         fail(f'{name} requires separate service auth')
 
-token_schema = pub.get('components',{}).get('schemas',{}).get('AuthTokens',{})
-if 'refresh_token' in token_schema.get('properties', {}):
-    fail('AuthTokens leaks refresh_token in JSON')
+pub_schemas = pub.get('components',{}).get('schemas',{})
+if 'AuthTokens' in pub_schemas:
+    fail('Tokens are cookie-only: AuthTokens must not exist')
+if 'password' in pub_schemas.get('LoginRequest',{}).get('properties',{}):
+    fail('Sign-in is passwordless: LoginRequest must not take a password')
+for name in ('AuthSession','AuthUser'):
+    props = json.dumps(pub_schemas.get(name,{}))
+    if 'token' in props:
+        fail(f'{name} exposes a token in JSON')
 for path in ('/api/v1/auth/refresh','/api/v1/auth/logout'):
     if pub['paths'][path]['post'].get('requestBody'):
         fail(f'{path} unexpectedly requires refresh body instead of HttpOnly cookie')
-    if not any(x.get('name')=='X-CSRF-Token' for x in pub['paths'][path]['post'].get('parameters', [])):
-        fail(f'{path} missing CSRF header')
 
 for file in (PACK / 'schemas').glob('*.json'):
     try:
@@ -121,7 +129,8 @@ fixture_map = {
     'auth-otp-resend.request.json':'email-otp.schema.json',
     'auth-otp-resend.response.json':'email-otp.schema.json',
     'auth-otp-verify.request.json':'email-otp.schema.json',
-    'auth.tokens.response.json':'auth-tokens.schema.json',
+    'auth-login.request.json':'email-otp.schema.json',
+    'auth.session.response.json':'auth-session.schema.json',
     'mcp.search-logs.output.json':'mcp-results.schema.json'
 }
 for fixture, schema_file in fixture_map.items():

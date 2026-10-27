@@ -17,7 +17,7 @@ Browser → HTTPS /api/v1/* → Main Backend → AI Backend
 
 | Route (пример стабильного client routing) | Экран | Основные серверные данные | P |
 |---|---|---|---|
-| `/login` | Email/password | auth/login, 202 challenge | P0 |
+| `/login` | Email — одно окно входа и регистрации | auth/login, 202 challenge | P0 |
 | `/verify-email` | Шесть цифр OTP | otp/verify, otp/resend | P0 |
 | `/overview` | Dashboard | GET overview, incidents | P0 |
 | `/incidents` | Incident registry | GET incidents filter/cursor | P0 |
@@ -28,7 +28,7 @@ Browser → HTTPS /api/v1/* → Main Backend → AI Backend
 | `/service-map` | Service graph | topology + health | P1 |
 | `/observability` | Logs & metrics | bounded telemetry REST queries | P1 |
 | `/traces` | Trace explorer | list and trace details | P1 |
-| `/settings` | Settings & users | GET users/me; admin API | P1 |
+| `/settings` | Профиль, участники и роли проекта | auth/me; API проектов | P1 |
 
 Nine initial Figma B screens plus independent Login/OTP. UI может показывать P1 экраны как read-only mocked preview во время разработки **только** с заметной маркировкой demo; нельзя выдавать mocks за реальные данные API.
 
@@ -40,8 +40,8 @@ src/
   shared/
     api/client.ts       # fetch/axios wrapper, Request-ID, auth, typed errors
     api/generated/      # generated types from approved public OpenAPI
-    auth/session.ts     # in-memory access, token refresh single-flight
-    realtime/ws.ts      # ticket, socket, heartbeat, reconnect
+    auth/session.ts     # cookie session: refresh single-flight, logout
+    realtime/ws.ts      # socket, heartbeat, reconnect after refresh
     ui/                 # primitives: table, badge, modal, tabs, skeleton
     lib/                # format UTC/timezone, URL validation, access helpers
   features/
@@ -51,7 +51,7 @@ src/
     investigations/     # start/cancel/retry, timeline state, run reducer
     evidence/           # cards/source links
     rca/                # structured report and human review
-    integrations/       # admin sources
+    integrations/       # project sources (integration.manage)
   pages/                 # assembled route screens, minimal data logic
   styles/                # tokens and dark theme
   test/                  # msw fixtures, test utils
@@ -61,17 +61,18 @@ src/
 
 ## 4. HTTP SDK и обработка сессии
 
-`apiClient` обязан: добавлять `Authorization: Bearer <access_token>` для защищённых методов, сохранять `X-Request-ID`, указывать `credentials: include` **только** для cookie auth paths, разбивать ошибки по `error.code`, отменять запрос через `AbortSignal`, не повторять автоматически неидемпотентные POST. Обработка refresh: одна `refreshPromise` на все конкурентные 401; после неудачного refresh очищать in-memory access и возвращать `/login`; повторять исходный GET/безопасный запрос один раз. Не хранить refresh в localStorage/sessionStorage.
+Сессия — только HttpOnly-куки `access_token` и `refresh_token`; JS их не видит, заголовка `Authorization` нет ([AUTH_BOUNDARY](contracts/AUTH_BOUNDARY.md)). `apiClient` обязан: отправлять все запросы same-origin с `credentials: "include"`, сохранять `X-Request-ID`, разбивать ошибки по `error.code`, отменять запрос через `AbortSignal`, не повторять автоматически неидемпотентные POST. Обработка refresh: одна `refreshPromise` (`POST /api/v1/auth/refresh`) на все конкурентные 401; после неудачного refresh сбросить кэш и вернуть на `/login`; повторять исходный GET/безопасный запрос один раз. `403 origin_forbidden` — ошибка конфигурации origin, а не прав.
 
-**OTP flow:** после `POST login` показывать masked email и таймер resend; на response 202 **не** открывать продукт. OTP вводить строкой (ведущий ноль возможен); 410 → новый вход, 429 → cooldown из `Retry-After`, 401 → сообщение без раскрытия лишних данных. Refresh страницы на `/verify-email`: challenge ID хранить только в session state или предлагать повторный login, password/OTP никогда не сохранять.
+**OTP flow:** пароля нет; `/login` спрашивает только email, вход и регистрация — один экран. После `POST login` показывать masked email и таймер resend; на response 202 **не** открывать продукт. OTP вводить строкой (ведущий ноль возможен); 410 → новый вход, 429 → cooldown из `Retry-After`, 401 → неверный код (`details.attempts_left`). `account_created: true` в ответе verify — первый вход: показать онбординг (создать проект или принять приглашение). Refresh страницы на `/verify-email`: challenge ID хранить только в session state или предлагать повторный login, OTP никогда не сохранять.
 
-**WS:** после авторизации взять одноразовый ticket по `POST /auth/ws-ticket`, подключить `wss://.../ws/v1/events` (по утверждённому способу передачи ticket), проверить ack. Не класть длинный JWT в URL.
+**WS:** после входа открыть `wss://<same-origin>/ws/v1/events` — кука `access_token` уходит сама, ticket не нужен. Закрытие с кодом `4401` → `refresh`, затем переподключение с REST-дочиткой. Ничего не класть в URL.
 
 ## 5. React Query: ключи, cache и invalidation
 
 | Ресурс | Query key | Правило |
 |---|---|---|
-| me | `['me']` | invalidate на login/logout/role change |
+| me | `['me']` | invalidate на login/logout |
+| my permissions | `['project-permissions', projectId]` | invalidate на смену роли и проекта |
 | projects | `['projects']` | cache внутри session |
 | incident list | `['incidents', projectId, envId, filters, cursor]` | server pagination, сохранить visible page при loading |
 | incident | `['incident', id]` | актуализировать при event/scope action |
@@ -86,7 +87,7 @@ src/
 
 1. Пользователь выбирает `investigation_id`, Frontend делает `GET /investigations/{id}` и `GET /investigations/{id}/events?after_sequence=0` с пагинацией до конца начального окна.
 2. Сортирует по `sequence`, запоминает `last_contiguous_sequence` (не max увиденного при gaps).
-3. Получает WS-ticket, открывает WS и посылает `subscribe` с `after_sequence=last_contiguous_sequence`.
+3. Открывает WS (кука `access_token`) и посылает `subscribe` с `after_sequence=last_contiguous_sequence`.
 4. При `event.sequence == last+1` применяет; при `<=last` игнорирует дубль; при `>last+1` буферизует, запрашивает REST replay и только после восполнения gap продолжает.
 5. `tool.started`/`tool.completed`/`hypothesis.updated` изменяют только соответствующее представление; payload events может быть summary, полной Evidence надо запрашивать отдельным REST методом.
 6. По `investigation.completed`/`inconclusive`/`failed`/`timed_out`/`canceled` обновляет run через REST; `completed` показывается только после сохранения отчёта Main Backend.
@@ -99,7 +100,7 @@ src/
 
 | Вкладка | API | UX при отсутствующих данных |
 |---|---|---|
-| Overview | incident + latest investigation | Нет run → CTA Start (Developer/Admin) |
+| Overview | incident + latest investigation | Нет run → CTA Start (право `investigation.run`) |
 | Live | investigation + events + WS | Нет run → пустой state; disconnected → keep history |
 | Hypotheses | `/investigations/{id}/hypotheses` | `0` гипотез = пусто, не создавать фейковые |
 | Evidence | `/investigations/{id}/evidence`; `/evidence/{id}` | показать source, observed_at, truncated, safe excerpt; link allowlist |
@@ -112,7 +113,7 @@ src/
 
 ## 8. RBAC, scope, безопасные ссылки
 
-Viewer читает только разрешённые проекты; Developer также Start/Retry/Cancel/Review/Resolve; Admin управляет project/service/integrations/users. UI скрывает действия по роли, но **сервер является единственным authority**. После каждого `/users/me` обновлять controls. Никаких `dangerouslySetInnerHTML` для log excerpts или LLM текста; Markdown только sanitised AST с запретом JS/HTML. Evidence `url` открывать после проверенного trusted hosts policy и с `rel="noopener noreferrer"`; никогда не строить URL напрямую из prompt/сырого текста модели.
+Глобальных ролей нет: пользователь видит только проекты, где он участник, и в каждом — свои права (`project.read`, `report.read`, `investigation.run`, `review.write`, `integration.manage`, `member.manage` и т. д., список — в [AUTH_BOUNDARY](contracts/AUTH_BOUNDARY.md#доступ-проекты-как-организации-github)). UI скрывает действия по правам текущего проекта, но **сервер является единственным authority**. При смене проекта или роли обновлять controls. Никаких `dangerouslySetInnerHTML` для log excerpts или LLM текста; Markdown только sanitised AST с запретом JS/HTML. Evidence `url` открывать после проверенного trusted hosts policy и с `rel="noopener noreferrer"`; никогда не строить URL напрямую из prompt/сырого текста модели.
 
 ## 9. UI states, дизайн, UX
 
@@ -125,7 +126,7 @@ Viewer читает только разрешённые проекты; Develope
 - Unit: formatter/timezone, permission selectors, status labels, event reducer, validation of URLs.
 - Component: login errors/OTP, empty incident, three outcomes report, Evidence safe excerpts, disabled actions, role guards.
 - API contract tests: MSW fixtures соответствуют **актуализированному OpenAPI**, тесты типов ломаются при несовместимом изменении DTO.
-- E2E: login→OTP→incidents→start→live events→result→review; reconnect/backfill; Viewer forbidden; 429 busy; timeout; 404 report before completion.
+- E2E: login→OTP→incidents→start→live events→result→review; reconnect/backfill; участник без `investigation.run` получает 403; 429 busy; timeout; 404 report before completion.
 - `npm ci`, lint, typecheck, tests и production build реально проходят; backend E2E — отдельно, не выдавать MSW mock за интеграцию.
 
 ### Готовность Frontend P0

@@ -1,37 +1,92 @@
-# Auth Service ↔ Main Backend ↔ Browser: единственная схема ответственности
+# Auth, Email, проекты и браузер: схема ответственности
 
-**Статус:** решение инженерного baseline v3, к согласованию владельцами `auth` и Main Backend.
+**Статус:** решение команды от 27.10.2026, заменяет вариант baseline v3 (пароль + OTP, access token в памяти браузера, WS-ticket, глобальные роли).
 
-## Разделение ответственности
+## Кто за что отвечает
 
-- **Auth Service** (`auth`): email/password, обязательный OTP при каждой новой аутентификации паролем, user identity, refresh session store, JWT signing keys, rotate/revoke. Токен без OTP **не выдаётся**.
-- **Main Backend**: единая публичная точка `/api/v1/auth/*`, `/api/v1/users/me`, проверка access JWT, project memberships, RBAC, enforcement scope для всех API/WS. Не хранит пароли/OTP, не заменяет identity сервис.
-- **Frontend**: хранит краткоживущий access JWT только в памяти; refresh cookie HttpOnly; access JWT никогда не помещается в URL, localStorage или WS query-string.
+Backend — набор микросервисов за общим gateway (Traefik); наружу он выглядит как один API `/api/v1`.
 
-## Публичный flow
+- **Auth** (`auth`): личность пользователя, вход и регистрация по email-коду, сессии (refresh, ротация, отзыв), подпись JWT и JWKS. Паролей нет. Ролей и проектов не знает.
+- **Email** (`email`): отправка писем по шаблонам — коды входа, приглашения, позже рассылки и отчёты. Принимает задачи из RabbitMQ, отправляет через провайдера (Resend), ведёт журнал доставки. Не знает о пользователях и проектах.
+- **Сервис проектов**: проекты, участники, приглашения, роли и права внутри проекта, API-токены проекта.
+- **Остальные сервисы** (инциденты, расследования, WS): сами проверяют access JWT по JWKS и права пользователя в проекте.
+- **Frontend**: токенов не видит и не хранит; все запросы — same-origin с `credentials: "include"`.
 
-1. `POST /api/v1/auth/login` — password verified Auth, выдаётся `202 LoginChallenge` (не токен).
-2. `POST /api/v1/auth/otp/verify` — один раз проверяет 6 цифр, `200 AuthTokens` с access только в JSON и `Set-Cookie` refresh; CSRF-token для refresh/logout выдаётся по конфигурации same-origin в отдельной доступной клиенту CSRF cookie/header (не совпадает с HttpOnly refresh).
-3. `POST /api/v1/auth/refresh` — refresh cookie + `X-CSRF-Token`; rotation; уже подтверждённой сессии OTP повторно не требуется.
-4. `POST /api/v1/auth/logout` — revoke current refresh family, clear cookie; access expiry остаётся bounded, короткой.
-5. `POST /api/v1/auth/ws-ticket` — выдаёт одноразовый cookie `aiip_ws_ticket` ≤30 с, HttpOnly Path `/ws/v1/events`, Origin allowlist; сервер проверяет scope при каждой подписке.
+## Вход и регистрация — одно окно
 
-## Связь между микросервисами
+Пароля нет. Вход и регистрация — один и тот же поток.
 
-На этапе MVP публичные `/api/v1/auth/*` обслуживаются через Main reverse-proxy/router к Auth Service в **той же доверенной внутренней сети**. Main либо валидирует JWT локально по опубликованному JWKS Auth issuer (предпочтительно), либо через согласованный identity introspection; **один способ утверждается до реализации**. В этом baseline выбираем *локальную проверку JWT через JWKS*:
+1. `POST /api/v1/auth/login {email}` → `202 LoginChallenge {challenge_id, masked_email, delivery_status, expires_in, resend_after}`. Ответ одинаковый для зарегистрированного и нового email. Куки не ставятся.
+2. Auth кладёт в RabbitMQ задачу на письмо с кодом и отвечает `202` только после подтверждения брокера (publisher confirm). Брокер недоступен — `503 otp_delivery_unavailable`, challenge удаляется.
+3. `POST /api/v1/auth/otp/verify {challenge_id, code}` → `200 AuthSession {user, account_created}` и куки сессии. Если пользователя с этим email не было, он создаётся здесь (`account_created: true`). Неподтверждённых аккаунтов не существует: пока код не введён, есть только challenge.
+4. `POST /api/v1/auth/otp/resend {challenge_id}` → `202`, прежний код недействителен.
 
-- Auth публикует `/.well-known/jwks.json` **во внутренней сети**, Main кеширует ключи с контролируемым TTL и rotation.
-- `iss`, `aud=aiip-main`, `exp`, `nbf`, `sub`, `jti` проверяются; alg allowlist, unsigned/JWT `none` отклоняется.
-- `sub` — immutable user identity; **роль и project membership берутся из Main DB**, а не слепо из клиента или старых claims.
-- Начальное создание пользователя и сопоставление `auth_user_id → main_user_id` должно выполняться транзакционно/идемпотентно. Дубли `sub` запрещены.
-- Внутреннее сервисное JWT Main↔AI — **отдельная аудитория**; никогда не использовать browser token для AI callbacks или MCP.
+**OTP:** 6 цифр строкой (ведущий ноль значим), TTL 300 с, 5 неверных попыток гасят challenge, resend не чаще 60 с и не больше 3 раз, challenge живёт не больше 900 с. На сервере хранится только digest кода, код проверяется и гасится атомарно один раз. Лимит запросов кода — по email и по клиенту, сверх лимита `429 otp_rate_limited` с `Retry-After`: каждое письмо стоит денег и квоты провайдера.
+
+## Сессия — только HttpOnly-куки
+
+| Кука | Что | Атрибуты |
+|---|---|---|
+| `access_token` | RS256 JWT, 15 минут | `HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=900` |
+| `refresh_token` | непрозрачная строка, 30 дней, ротация при каждом refresh | `HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth; Max-Age=2592000` |
+
+- Токены никогда не попадают в тело ответа, URL, `localStorage` и JS. Bearer-токена у браузера нет.
+- `POST /api/v1/auth/refresh` → `204` и новые куки; `POST /api/v1/auth/logout` → `204`, сессия отозвана, куки очищены.
+- Предыдущий refresh 10 секунд после ротации считается соседней вкладкой и получает только новый access; позже — признак кражи, сессия отзывается.
+- `GET /api/v1/auth/me` → `{id, email, created_at}`. Проекты и права пользователя — в API проектов.
+- `Secure` отключается только в локальной разработке по HTTP.
+
+## CSRF
+
+Сессия в куке, поэтому каждый изменяющий запрос (`POST`, `PUT`, `PATCH`, `DELETE`) любого сервиса проверяет заголовок `Origin` по allowlist. Нет `Origin` или он чужой — `403 origin_forbidden`. Вместе с `SameSite=Strict` это закрывает межсайтовые запросы; отдельный CSRF-токен не нужен.
+
+## WebSocket
+
+`wss://<same-origin>/ws/v1/events` аутентифицируется той же кукой `access_token` (она на `Path=/`). Сервер при handshake проверяет `Origin` по allowlist, подпись и срок JWT, живость сессии и права на каждую подписку. Отдельного WS-ticket нет. Истёк access — сервер закрывает соединение с кодом `4401`, клиент делает `refresh` и переподключается с дочиткой по REST.
+
+## Проверка токена сервисами
+
+- Auth публикует `GET /.well-known/jwks.json` только внутри кластера; сервисы кэшируют ключи и меняют их по `kid`.
+- Claims: `iss=auth`, `aud=aiip`, `sub` — неизменный id пользователя, `sid` — id сессии, `iat`, `exp`. Алгоритм — только `RS256`.
+- Отзыв мгновенный: после проверки подписи сервис проверяет пропуск живой сессии `auth:session:<sid>` в Dragonfly. Нет ключа — `401`, кэш недоступен — отказ.
+- Ролей и проектов в токене нет: права каждый сервис проверяет по данным сервиса проектов.
+- Внутренние вызовы Main ↔ AI идут с отдельной сервисной аутентификацией; браузерная сессия на внутреннем API не принимается.
+
+## Доступ: проекты как организации GitHub
+
+Глобальных ролей и общего администратора нет.
+
+- Зарегистрироваться может любой. Любой пользователь может создать проект и становится его **owner**.
+- Проект ≈ организация GitHub, репозиторий ≈ репозиторий, коннектор (integration) ≈ источник мониторинга. AI-агент в расследовании видит код и коннекторы своего проекта.
+- Owner и участники с правом `member.manage` приглашают людей по email и назначают им роль. Приглашённый входит по коду на этот email и принимает приглашение.
+- Роль — набор прав внутри одного проекта. У пользователя в разных проектах разные роли; без членства проект не виден (`404`).
+
+Права (черновик, фиксируется вместе с API проектов):
+
+| Право | Что даёт |
+|---|---|
+| `project.read` | видеть проект, сервисы, инциденты |
+| `report.read` | читать расследования, Evidence и RCA |
+| `investigation.run` | запускать, отменять и повторять расследования |
+| `review.write` | Review результата AI |
+| `incident.manage` | ручной инцидент, resolve / reopen |
+| `repository.manage` | подключать и отключать репозитории |
+| `integration.manage` | подключать коннекторы мониторинга |
+| `api_token.manage` | выпускать и отзывать API-токены проекта (`X-Ingest-Key`) — по ним алерт запускает агента |
+| `member.manage` | приглашать, менять роли, исключать |
+| `project.manage` | настройки проекта, окружения, сервисы |
+
+Owner имеет все права, а также удаляет проект и передаёт владение. Маршруты участников, приглашений, ролей и API-токенов добавляются в [public OpenAPI](openapi/main-public.openapi.yaml) вместе с сервисом проектов.
 
 ## Обязательные тесты интеграции
 
-- неверный пароль/OTP, 5 ошибок OTP, истёкшая задача, resend, повторный verify — без выдачи сессии;
-- refresh без CSRF/с подменённой cookie/после logout — reject; concurrency rotation без сдвоенной сессии;
-- JWT неправильный `aud`, `iss`, `alg`, expired, deleted membership — reject;
-- переход Viewer→Admin проверяется Main DB, чужой `project_id` не даёт доступ;
-- WS ticket one-use, Origin mismatch, expiry, duplicate subscription, expired session — reject.
+- `login` на известный и неизвестный email отвечает одинаково; до `otp/verify` кук нет и `/auth/me` → `401`;
+- неверный код, 5 ошибок, истёкший challenge, resend раньше срока и сверх лимита, повторный verify — без сессии;
+- первый verify неизвестного email создаёт пользователя ровно один раз, параллельные verify не создают дубль;
+- refresh без куки, с подменённой, после logout, с чужим `Origin` — отказ; параллельный refresh не создаёт вторую сессию;
+- JWT с чужим `aud`, `iss`, `alg`, истёкший, с отозванной сессией — `401`;
+- изменяющий запрос без `Origin` или с чужим — `403`;
+- WS: чужой `Origin`, нет куки, истёкший access, подписка на чужой проект — отказ;
+- права проверяются сервером: участник без `investigation.run` получает `403`, не участник — `404`.
 
-Полные HTTP payload и headers см. [public OpenAPI](openapi/main-public.openapi.yaml). Это **не** скрытый публичный JWT-introspection API.
+Полные HTTP payload и headers — в [public OpenAPI](openapi/main-public.openapi.yaml).

@@ -11,7 +11,7 @@
 | Олег, AI Backend | LangGraph, LLM adapter, MCP client/server, durable executor, result/outbox | internal REST mock+schema, event/result examples, read-only tool catalog, E2E run | users/auth, browser WS, auto-remediation |
 | Даниил, Infra/Demo | k3d, databases/monitoring, payment-demo, controlled faults | accessible service endpoint, project/env/service mapping, observed Loki/Prom/Tempo labels, scenario ground truth to evaluator only | model prompts/agent decisions, Main domain |
 
-Auth repository: отвечает за OTP/password/tokens/session, но публичный browser-facing endpoint должен совпадать с единым API. Ответственного за auth назначает команда вне этого документа; это не повод Frontend начать собственный login backend.
+Сервис `auth` (Юрий): вход и регистрация по email-коду без пароля, сессии в HttpOnly-куках, JWKS; письма отправляет сервис `email` (Юрий) через RabbitMQ. Публичные пути — единый API `/api/v1/auth/*` ([AUTH_BOUNDARY](contracts/AUTH_BOUNDARY.md)); это не повод Frontend начать собственный login backend.
 
 ## 2. Единый контрактный процесс
 
@@ -45,7 +45,7 @@ Auth repository: отвечает за OTP/password/tokens/session, но пуб�
 
 ### Stage C: Browser ↔ Main
 
-1. Auth login/OTP → authenticated `/users/me`.
+1. Auth login/OTP → куки сессии → `/auth/me` и список проектов с правами.
 2. Backend отдаёт реальные Incident/run DTO, Frontend использует их вместо MSW.
 3. Frontend Start, Main сохраняет pending, dispatch worker стартует AI.
 4. Main DB получает события; Frontend подписывается на WS и делает backfill.
@@ -66,7 +66,7 @@ Auth repository: отвечает за OTP/password/tokens/session, но пуб�
 
 **Файлы:** `public.openapi.yaml`, `examples/auth-login-202.json`, `auth-verify-200.json`, `incidents-page.json`, `investigation-pending.json`, `investigation-completed.json`, `events-tool-completed.json`, `result-inconclusive.json`, `error-403.json`; WebSocket contract `ws.schema.json`.
 
-**Информация:** base URL dev; CORS/origin/cookie behaviour; roles/project scopes; точные типы errors; pagination; WS ticket handshake + resume. **Проверка:** Расул генерирует TS types, его API mocks проходят schema validation; Юрий отвечает на contract-based тесты.
+**Информация:** base URL dev; origin allowlist и cookie behaviour; права в проектах; точные типы errors; pagination; WS handshake по куке + resume. **Проверка:** Расул генерирует TS types, его API mocks проходят schema validation; Юрий отвечает на contract-based тесты.
 
 ### Олег → Юрий
 
@@ -130,7 +130,7 @@ Auth repository: отвечает за OTP/password/tokens/session, но пуб�
 ## 8. Что сделать непосредственно сейчас
 
 1. Выложить эту редакцию как предложенный integration baseline на ревью всей команде.
-2. Обновить machine schemas старого v0.2, добавив internal REST выбранного транспорта, Loki tools, OTP refresh cookie/WS ticket.
+2. Обновить machine schemas старого v0.2, добавив internal REST выбранного транспорта, Loki tools, OTP и cookie-сессию.
 3. Выдать Юрию `B-01–B-05`, Расулу auth+Incident/Live UI на fixtures, Олегу AI-02/03 (после интеграции AI-01), Даниилу payment-service PAY-01 и telemetry.
 4. Подписать минимум event/result JSON fixtures и запустить Stage B без ожидания готовности UI.
 
@@ -138,7 +138,7 @@ Auth repository: отвечает за OTP/password/tokens/session, но пуб�
 ## 9. Конкретные машинные файлы передачи v3
 
 - Юрий → Расул: [main-public OpenAPI](contracts/openapi/main-public.openapi.yaml) + [WebSocket schema](contracts/schemas/websocket.schema.json) + [WS protocol](contracts/WEBSOCKET.md).
-- Юрий ↔ владелец Auth: [Auth boundary](contracts/AUTH_BOUNDARY.md) + refresh cookie, JWKS issuer/audience и membership tests.
+- Юрий (`auth`, `email`, проекты) → Расул: [Auth boundary](contracts/AUTH_BOUNDARY.md) — вход по коду, куки, JWKS issuer/audience, права в проекте и membership tests.
 - Олег ↔ Юрий: [AI internal OpenAPI](contracts/openapi/ai-internal.openapi.yaml), [Main callbacks OpenAPI](contracts/openapi/main-callbacks.openapi.yaml), `contracts/schemas/ai-*`, fixtures.
 - Олег ↔ Даниил: [MCP tool catalog](contracts/mcp/tool-catalog.json) + [MCP telemetry map](contracts/MCP_AND_TELEMETRY.md).
 - Юрий ↔ Даниил: [Ingestion](contracts/INGESTION.md), mapping project/environment/service и signed ingest fixture.

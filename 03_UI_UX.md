@@ -20,7 +20,7 @@
 | **Logs & Metrics** | Исследовать сырьё вручную | bounded query, time range, графики и deep links | P1 |
 | **Traces** | Найти медленное звено запроса | trace list, span waterfall, source links | P1 |
 | **Settings** | Управлять профилем / ролями | профиль, проект, роли, read-only budgets | P1 |
-| **Login + Email OTP** | Безопасно войти | email/password → OTP challenge → app | P0 |
+| **Login + Email OTP** | Войти или зарегистрироваться | email → код на почту → app (одно окно, без пароля) | P0 |
 
 Наличие экрана в Figma не означает, что все его действия и backend endpoints уже реализованы.
 
@@ -64,9 +64,11 @@ Investigation status: Running  •  Step 8/20  •  Cancel
 
 ## 8. Права и состояния
 
-- Viewer: читает, не запускает и не подтверждает.
-- Developer: Start / Cancel / Retry / Review и ручной Resolve на разрешённых проектах.
-- Admin: интеграции, проекты, доступы, те же права расследования.
+Права — внутри проекта, глобальных ролей нет ([AUTH_BOUNDARY](contracts/AUTH_BOUNDARY.md#доступ-проекты-как-организации-github)). Экран показывает действия по правам текущего проекта:
+
+- только `project.read` / `report.read`: читает, не запускает и не подтверждает;
+- `investigation.run`, `review.write`, `incident.manage`: Start / Cancel / Retry / Review и ручной Resolve;
+- `integration.manage`, `member.manage`, `project.manage` или owner: интеграции, участники, настройки проекта.
 
 Каждый экран имеет `loading`, `empty`, `error`, `forbidden`, `not_found`, `source_unavailable`, `partial`; активная операция — `pending/running`, а не заглушка с выдуманным результатом.
 

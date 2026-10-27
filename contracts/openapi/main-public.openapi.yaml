@@ -3,15 +3,15 @@ info:
   title: AI Incident Investigator — Main Backend Public API
   version: 1.0.0-proposed
   description: Implementation baseline v3 (PROPOSED pending team approval). Public REST only. No AI callbacks exposed
-    on public spec.
+    on public spec. Auth amended 2026-10-27 by team decision - passwordless email OTP, cookie-only session, no
+    global roles.
 servers:
 - url: /
   description: same-origin public API behind Traefik
 security:
-- BearerAuth: []
+- CookieAuth: []
 tags:
 - name: Auth
-- name: Users
 - name: Projects
 - name: Environments
 - name: Services
@@ -30,35 +30,39 @@ paths:
     post:
       tags:
       - Auth
-      summary: Validate email/password and send required email OTP challenge (NO JWT)
+      summary: Start sign-in or sign-up by email and send a one-time code (NO session)
       operationId: post_api_v1_auth_login
+      description: One entry point for both sign-in and sign-up; there are no passwords. The response is the same
+        whether the email is registered or not. The account is created only by a successful /auth/otp/verify, so
+        unconfirmed accounts do not exist. Cookies are never set here.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
       responses:
-        default:
-          description: API error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Problem'
         '202':
-          description: OTP delivery queued; no access or refresh tokens returned
-          headers:
-            Retry-After:
-              description: Optional resend throttling seconds
-              schema:
-                type: integer
-                minimum: 0
+          description: Code delivery queued; no session issued
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/LoginChallenge'
-        '401':
-          description: Incorrect email/password, generic response
+        '403':
+          description: Origin not allowed (origin_forbidden)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: Invalid email (validation_error)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Problem'
         '429':
-          description: Login rate limit exceeded
+          description: Too many codes requested for this email or client (otp_rate_limited)
           headers:
             Retry-After:
               schema:
@@ -69,30 +73,26 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
         '503':
-          description: OTP delivery path unavailable; cannot complete login
+          description: Code delivery path unavailable (otp_delivery_unavailable); nothing was sent
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Problem'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/LoginRequest'
-      security: []
-      description: Password login stage 1 of 2. Returns an opaque OTP challenge only; tokens MUST NOT be issued
-        until /auth/otp/verify succeeds. OTP is required on every new email/password login. No user-specific details
-        on invalid credentials.
+        default:
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
   /api/v1/auth/otp/verify:
     post:
       tags:
       - Auth
       operationId: verifyEmailOtp
-      summary: Verify one-time email code and create authenticated session
-      description: Only this endpoint issues the initial JWT tokens after successful email/password + OTP. Verification
-        is atomic, one-time, and bound to the challenge created by /auth/login. Refresh of an already verified session
-        does not require OTP.
+      summary: Verify the one-time code, create the account if new, and open a session
+      description: The only endpoint that opens a session. Verification is atomic and one-time, bound to the
+        challenge from /auth/login. For an unknown email the account is created here (account_created=true).
+        Tokens are never returned in the body; both are set as HttpOnly cookies.
       security: []
       requestBody:
         required: true
@@ -102,30 +102,38 @@ paths:
               $ref: '#/components/schemas/OtpVerifyRequest'
       responses:
         '200':
-          description: Access token in JSON; rotated refresh token is Set-Cookie HttpOnly, never response body
+          description: Session opened
+          headers:
+            Set-Cookie:
+              description: 'access_token: HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=900 and refresh_token:
+                HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth; Max-Age=2592000'
+              schema:
+                type: string
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthTokens'
-          headers:
-            Set-Cookie:
-              description: HttpOnly Secure refresh cookie with Path=/api/v1/auth
-              schema:
-                type: string
+                $ref: '#/components/schemas/AuthSession'
         '401':
-          description: Invalid OTP or invalid login challenge
+          description: Wrong code (otp_invalid); details.attempts_left is the number of attempts left
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '403':
+          description: Origin not allowed (origin_forbidden)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Problem'
         '410':
-          description: OTP expired/used; repeat password login
+          description: Code expired, already used or attempts exhausted (otp_expired, otp_challenge_invalid); start
+            again with /auth/login
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Problem'
         '429':
-          description: Too many attempts
+          description: Too many attempts (otp_rate_limited)
           headers:
             Retry-After:
               schema:
@@ -146,9 +154,9 @@ paths:
       tags:
       - Auth
       operationId: resendEmailOtp
-      summary: Rotate and resend code for existing password-verified challenge
-      description: No credentials or tokens in response. The prior code becomes invalid; resend is rate-limited
-        and the challenge has an absolute maximum lifetime.
+      summary: Send a new code for an existing challenge
+      description: The previous code becomes invalid. Not more often than resend_after and not more than 3 times per
+        challenge; the challenge lives at most 900 seconds.
       security: []
       requestBody:
         required: true
@@ -158,19 +166,19 @@ paths:
               $ref: '#/components/schemas/OtpResendRequest'
       responses:
         '202':
-          description: Replacement OTP queued; previous OTP revoked
+          description: Replacement code queued; previous code revoked
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/OtpResendResponse'
         '410':
-          description: Challenge no longer valid
+          description: Challenge no longer valid (otp_challenge_invalid)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Problem'
         '429':
-          description: Rate limited by challenge, user, email or IP
+          description: Resend too early or resend limit reached (otp_rate_limited)
           headers:
             Retry-After:
               schema:
@@ -190,130 +198,86 @@ paths:
     post:
       tags:
       - Auth
-      summary: Refresh access token
+      summary: Rotate the session cookies
       operationId: post_api_v1_auth_refresh
+      description: Reads the refresh_token cookie, rotates it and issues a new access_token cookie. No body in either
+        direction. A code is not required again for an already verified session.
+      security: []
       responses:
-        '200':
-          description: Access token in JSON; rotated refresh token is Set-Cookie HttpOnly, never response body
+        '204':
+          description: Cookies rotated
+          headers:
+            Set-Cookie:
+              description: New access_token and refresh_token cookies, same attributes as in /auth/otp/verify
+              schema:
+                type: string
+        '401':
+          description: Refresh cookie missing, expired, revoked or reused (unauthenticated)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthTokens'
-          headers:
-            Set-Cookie:
-              description: HttpOnly Secure refresh cookie with Path=/api/v1/auth
+                $ref: '#/components/schemas/Problem'
+        '403':
+          description: Origin not allowed (origin_forbidden)
+          content:
+            application/json:
               schema:
-                type: string
+                $ref: '#/components/schemas/Problem'
         default:
           description: API error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Problem'
-      security: []
-      parameters:
-      - in: header
-        name: X-CSRF-Token
-        required: true
-        schema:
-          type: string
-          minLength: 16
-        description: CSRF double-submit token bound to refresh session
   /api/v1/auth/logout:
     post:
       tags:
       - Auth
-      summary: Revoke current session
+      summary: Revoke the current session
       operationId: post_api_v1_auth_logout
+      description: Revokes the session of the refresh_token cookie and clears both cookies. Idempotent.
+      security: []
       responses:
         '204':
-          description: Accepted/created
+          description: Session revoked, cookies cleared
+        '403':
+          description: Origin not allowed (origin_forbidden)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         default:
           description: API error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Problem'
-      parameters:
-      - in: header
-        name: X-CSRF-Token
-        required: true
-        schema:
-          type: string
-          minLength: 16
-  /api/v1/users/me:
+  /api/v1/auth/me:
     get:
       tags:
-      - Users
-      summary: Authenticated user and project scopes
-      operationId: get_api_v1_users_me
+      - Auth
+      summary: Current user identity
+      operationId: get_api_v1_auth_me
+      description: Identity only. Projects and the caller's permissions in them come from the projects API.
       responses:
         '200':
           description: Success
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
+                $ref: '#/components/schemas/AuthUser'
+        '401':
+          description: Not authenticated (unauthenticated)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         default:
           description: API error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Problem'
-  /api/v1/users:
-    get:
-      tags:
-      - Users
-      summary: List users (Admin)
-      operationId: get_api_v1_users
-      responses:
-        '200':
-          description: Success
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UsersPage'
-        default:
-          description: API error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Problem'
-      parameters:
-      - name: cursor
-        in: query
-        required: false
-        schema:
-          type: string
-      - name: limit
-        in: query
-        required: false
-        schema:
-          type: integer
-    post:
-      tags:
-      - Users
-      summary: Invite/create user (Admin)
-      operationId: post_api_v1_users
-      responses:
-        '201':
-          description: Accepted/created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-        default:
-          description: API error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Problem'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UserCreate'
   /api/v1/projects:
     get:
       tags:
@@ -347,7 +311,7 @@ paths:
     post:
       tags:
       - Projects
-      summary: Create project (Admin)
+      summary: Create project; any signed-in user, the caller becomes its owner
       operationId: post_api_v1_projects
       responses:
         '201':
@@ -397,7 +361,7 @@ paths:
     patch:
       tags:
       - Projects
-      summary: Update project (Admin)
+      summary: Update project (project.manage)
       operationId: patch_api_v1_projects_project_id
       responses:
         '200':
@@ -454,7 +418,7 @@ paths:
     post:
       tags:
       - Environments
-      summary: Create environment (Admin)
+      summary: Create environment (project.manage)
       operationId: post_api_v1_projects_project_id_environments
       responses:
         '201':
@@ -486,7 +450,7 @@ paths:
     patch:
       tags:
       - Environments
-      summary: Update environment (Admin)
+      summary: Update environment (project.manage)
       operationId: patch_api_v1_environments_environment_id
       responses:
         '200':
@@ -553,7 +517,7 @@ paths:
     post:
       tags:
       - Services
-      summary: Register configured service (Admin)
+      summary: Register configured service (project.manage)
       operationId: post_api_v1_projects_project_id_services
       responses:
         '201':
@@ -610,7 +574,7 @@ paths:
     patch:
       tags:
       - Services
-      summary: Update service mapping (Admin)
+      summary: Update service mapping (project.manage)
       operationId: patch_api_v1_services_service_id
       responses:
         '200':
@@ -885,7 +849,7 @@ paths:
     post:
       tags:
       - Incidents
-      summary: Manually create incident (Developer/Admin)
+      summary: Manually create incident (incident.manage)
       operationId: post_api_v1_incidents
       responses:
         '201':
@@ -936,7 +900,7 @@ paths:
     patch:
       tags:
       - Incidents
-      summary: Resolve/reopen incident (Developer/Admin)
+      summary: Resolve/reopen incident (incident.manage)
       operationId: patch_api_v1_incidents_incident_id_status
       responses:
         '200':
@@ -1024,7 +988,7 @@ paths:
     post:
       tags:
       - Incidents
-      summary: Create human root-cause review (Developer/Admin)
+      summary: Create human root-cause review (review.write)
       operationId: post_api_v1_incidents_incident_id_reviews
       responses:
         '201':
@@ -1082,7 +1046,7 @@ paths:
     post:
       tags:
       - Investigations
-      summary: Start a new AI investigation (asynchronous)
+      summary: Start a new AI investigation (asynchronous; investigation.run)
       operationId: post_api_v1_incidents_incident_id_investigations
       responses:
         '202':
@@ -1197,7 +1161,7 @@ paths:
     post:
       tags:
       - Investigations
-      summary: Request cooperative cancel
+      summary: Request cooperative cancel (investigation.run)
       operationId: post_api_v1_investigations_investigation_id_cancel
       responses:
         '202':
@@ -1223,7 +1187,7 @@ paths:
     post:
       tags:
       - Investigations
-      summary: New run with new investigation ID
+      summary: New run with new investigation ID (investigation.run)
       operationId: post_api_v1_investigations_investigation_id_retry
       responses:
         '202':
@@ -1582,7 +1546,7 @@ paths:
     get:
       tags:
       - Integrations
-      summary: List connected integrations (Admin)
+      summary: List connected integrations (integration.manage)
       operationId: get_api_v1_integrations
       responses:
         '200':
@@ -1611,7 +1575,7 @@ paths:
     post:
       tags:
       - Integrations
-      summary: Register connection (Admin)
+      summary: Register connection (integration.manage)
       operationId: post_api_v1_integrations
       responses:
         '201':
@@ -1661,7 +1625,7 @@ paths:
     patch:
       tags:
       - Integrations
-      summary: Update connection (Admin)
+      summary: Update connection (integration.manage)
       operationId: patch_api_v1_integrations_integration_id
       responses:
         '200':
@@ -1692,7 +1656,7 @@ paths:
     delete:
       tags:
       - Integrations
-      summary: Remove connection (Admin)
+      summary: Remove connection (integration.manage)
       operationId: delete_api_v1_integrations_integration_id
       responses:
         '204':
@@ -1714,7 +1678,7 @@ paths:
     post:
       tags:
       - Integrations
-      summary: Test connection without exposing secrets (Admin)
+      summary: Test connection without exposing secrets (integration.manage)
       operationId: post_api_v1_integrations_integration_id_test
       responses:
         '200':
@@ -1840,83 +1804,6 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/AlertmanagerWebhook'
-  /api/v1/users/{user_id}:
-    get:
-      tags:
-      - Users
-      summary: Get user (Admin)
-      operationId: get_user_by_id
-      parameters:
-      - name: user_id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      responses:
-        '200':
-          description: Success
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-    patch:
-      tags:
-      - Users
-      summary: Update user role/projects/status (Admin)
-      operationId: patch_user_by_id
-      parameters:
-      - name: user_id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      responses:
-        '200':
-          description: Success
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UserPatch'
-  /api/v1/auth/ws-ticket:
-    post:
-      summary: Issue one-use HttpOnly same-origin WebSocket ticket (TTL ≤30s)
-      operationId: issue_ws_ticket
-      tags:
-      - Auth
-      security:
-      - BearerAuth: []
-      responses:
-        '200':
-          description: WS ticket issued only via Set-Cookie
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/WSTicketAck'
-          headers:
-            Set-Cookie:
-              description: aiip_ws_ticket; HttpOnly; Secure; SameSite=Lax; Path=/ws/v1/events; Max-Age=30
-              schema:
-                type: string
-        '401':
-          description: Not authenticated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Problem'
-        '403':
-          description: Origin/scope invalid
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Problem'
 components:
   schemas:
     UUID:
@@ -1958,8 +1845,23 @@ components:
               type: object
               additionalProperties: true
       description: Единый JSON error envelope для public/internal API; details sanitized
-    User:
+    LoginRequest:
       type: object
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+      required:
+      - email
+      additionalProperties: false
+    AuthUser:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - email
+      - created_at
       properties:
         id:
           type: string
@@ -1967,58 +1869,21 @@ components:
         email:
           type: string
           format: email
-        display_name:
+        created_at:
           type: string
-        role:
-          type: string
-          enum:
-          - admin
-          - developer
-          - viewer
-        project_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
-        is_active:
+          format: date-time
+    AuthSession:
+      type: object
+      additionalProperties: false
+      required:
+      - user
+      - account_created
+      properties:
+        user:
+          $ref: '#/components/schemas/AuthUser'
+        account_created:
           type: boolean
-      required:
-      - id
-      - email
-      - display_name
-      - role
-      - project_ids
-      - is_active
-      additionalProperties: false
-    LoginRequest:
-      type: object
-      properties:
-        email:
-          type: string
-          format: email
-        password:
-          type: string
-      required:
-      - email
-      - password
-      additionalProperties: false
-    AuthTokens:
-      type: object
-      additionalProperties: false
-      required:
-      - access_token
-      - token_type
-      - expires_in
-      properties:
-        access_token:
-          type: string
-          minLength: 1
-        token_type:
-          type: string
-          const: bearer
-        expires_in:
-          type: integer
-          minimum: 1
+          description: True when this verification created the account (first sign-in).
     Project:
       type: object
       properties:
@@ -3743,21 +3608,6 @@ components:
       - items
       - next_cursor
       additionalProperties: false
-    UsersPage:
-      type: object
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/User'
-        next_cursor:
-          type:
-          - string
-          - 'null'
-      required:
-      - items
-      - next_cursor
-      additionalProperties: false
     ProjectsPage:
       type: object
       properties:
@@ -3953,51 +3803,6 @@ components:
       - items
       - next_cursor
       additionalProperties: false
-    UserCreate:
-      type: object
-      additionalProperties: false
-      required:
-      - email
-      - role
-      - project_ids
-      properties:
-        email:
-          type: string
-          format: email
-        display_name:
-          type: string
-          maxLength: 150
-        role:
-          type: string
-          enum:
-          - admin
-          - developer
-          - viewer
-        project_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
-    UserPatch:
-      type: object
-      additionalProperties: false
-      properties:
-        display_name:
-          type: string
-          maxLength: 150
-        role:
-          type: string
-          enum:
-          - admin
-          - developer
-          - viewer
-        project_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
-        is_active:
-          type: boolean
     IntegrationPatch:
       type: object
       additionalProperties: false
@@ -4146,7 +3951,7 @@ components:
         masked_email:
           type: string
           maxLength: 254
-          description: Partially masked verified email, displayed only after valid credentials.
+          description: Partially masked email the code was sent to; the same for registered and new emails.
         expires_in:
           type: integer
           minimum: 1
@@ -4210,31 +4015,28 @@ components:
     OtpProblemCode:
       type: string
       enum:
-      - invalid_credentials
       - otp_invalid
       - otp_expired
       - otp_rate_limited
       - otp_delivery_unavailable
       - otp_challenge_invalid
+      - origin_forbidden
+      - unauthenticated
       - validation_error
-    WSTicketAck:
-      type: object
-      additionalProperties: false
-      required:
-      - expires_in
-      properties:
-        expires_in:
-          type: integer
-          const: 30
   securitySchemes:
-    BearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
+    CookieAuth:
+      type: apiKey
+      in: cookie
+      name: access_token
+      description: Short-lived RS256 JWT set by /auth/otp/verify and /auth/refresh as an HttpOnly, SameSite=Strict
+        cookie on Path=/. The browser never reads or sends tokens itself (credentials include). Every state-changing
+        cookie-authenticated request must carry an allowlisted Origin header, otherwise 403 origin_forbidden.
     IngestKey:
       type: apiKey
       in: header
       name: X-Ingest-Key
+      description: Project API token. Issued and revoked inside a project by members with api_token.manage; bound to
+        the project (and optionally environment), shown once, stored only as a hash.
     ServiceAuth:
       type: http
       scheme: bearer

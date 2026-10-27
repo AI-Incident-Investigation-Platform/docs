@@ -42,7 +42,10 @@
 ```mermaid
 flowchart LR
   Browser[React browser] <-->|REST + WebSocket| Main[Main Backend]
-  Auth[Auth service: password + email OTP] <-->|internal identity / session| Main
+  Browser <-->|/api/v1/auth: email OTP, HttpOnly cookies| Auth[Auth service]
+  Auth -->|RabbitMQ: письмо с кодом| Email[Email service]
+  Email --> Resend[Resend API]
+  Auth -.->|JWKS + пропуск сессии в Dragonfly| Main
   Main <-->|REST internal Start / callbacks| AI[AI Backend]
   AI --> LLM[llama-server / Qwen]
   AI <-->|MCP Streamable HTTP| MCP[MCP Server read-only]
@@ -58,7 +61,7 @@ flowchart LR
   Infra --> Tempo
 ```
 
-**Ключевые границы:** Browser не обращается к AI/MCP; Main владеет Incident, RCA и Review; AI владеет расследованием и его execution state; MCP только read-only; Infra поставляет настоящие диагностические данные. RabbitMQ между Main и AI нет.
+**Ключевые границы:** Browser не обращается к AI/MCP; Main владеет Incident, RCA и Review; AI владеет расследованием и его execution state; MCP только read-only; Infra поставляет настоящие диагностические данные. RabbitMQ между Main и AI нет; он используется только для задач на письма `auth` → `email`.
 
 ## 3. Решения рабочего baseline v2
 
@@ -69,8 +72,10 @@ flowchart LR
 | MCP | Внутренний AI-owned Streamable HTTP Server, read-only |
 | Логи | **Loki**, не Elasticsearch из исторических схем |
 | Метрики / трейсы | Prometheus / Tempo через существующий Alloy |
-| Auth | Password → email OTP каждый новый вход; refresh HttpOnly cookie |
-| WebSocket auth | 30-секундный single-use HttpOnly WS ticket cookie, Origin check |
+| Auth | Без пароля: email → код на почту, одно окно входа и регистрации; access и refresh только в HttpOnly-куках (решение команды 27.10.2026) |
+| WebSocket auth | та же кука `access_token` + проверка `Origin`, без WS-ticket |
+| Доступ | Глобальных ролей нет: проект создаёт любой пользователь и становится owner, роли — наборы прав внутри проекта ([AUTH_BOUNDARY](contracts/AUTH_BOUNDARY.md)) |
+| Backend | микросервисы за gateway, наружу один API `/api/v1`; письма — сервис `email` через RabbitMQ |
 | Long-running runs | PostgreSQL registry/checkpoints, Main dispatch/outbox, no HTTP 20min |
 | AI busy | 429 + Retry-After, Main durable bounded retry |
 | Reliable result | AI callback + GET result readback, Main atomic persistence |

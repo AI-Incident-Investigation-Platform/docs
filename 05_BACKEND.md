@@ -1,6 +1,6 @@
 # 05. Main Backend — спецификация для реализации серверной части
 
-**Ответственный за домен:** Юрий. **Другие репозитории:** в GitHub организации существует отдельный `auth`; его владелец реализует аутентификацию, но браузер видит согласованный `/api/v1/auth/*`. **Стек реализации:** Python FastAPI, Pydantic v2, SQLAlchemy 2 Async, Alembic, PostgreSQL, httpx, OpenTelemetry. Применять существующую репозиторную архитектуру; не переносить код между репозиториями без PR. **Контракт с Frontend/AI:** [12_INTERSERVICE_CONTRACTS.md](12_INTERSERVICE_CONTRACTS.md).
+**Ответственный за домен:** Юрий. **Архитектура:** backend — микросервисы за общим gateway (Traefik), наружу один API `/api/v1` (решение команды 27.10.2026). «Main Backend» ниже — это совокупность сервисов, а модули §2 — кандидаты в отдельные сервисы. Аутентификация — сервис `auth` (`/api/v1/auth/*`), письма — сервис `email` по RabbitMQ; схема — [AUTH_BOUNDARY](contracts/AUTH_BOUNDARY.md). **Стек реализации:** Python FastAPI, Pydantic v2, SQLAlchemy 2 Async, Alembic, PostgreSQL, httpx, OpenTelemetry. Применять существующую репозиторную архитектуру; не переносить код между репозиториями без PR. **Контракт с Frontend/AI:** [12_INTERSERVICE_CONTRACTS.md](12_INTERSERVICE_CONTRACTS.md).
 
 ## 1. Что сервер обязан предоставлять
 
@@ -33,7 +33,7 @@ WebSocket hub ← DB/outbox events
 
 ### Registry / scopes
 
-- `users`/`sessions`/`otp_challenges` принадлежат Auth service, если он выделен физически; Main хранит `project_memberships(user_id,project_id,role)` или эквивалентные scoped roles с FK/согласованной identity resolution.
+- `users`/`sessions`/`otp_challenges` принадлежат сервису `auth`; паролей нет. Сервис проектов хранит `project_memberships(user_id,project_id,role_id)`, роли проекта с набором прав, приглашения по email и API-токены проекта (только хэш). Глобальной роли у пользователя нет; создатель проекта — owner.
 - `projects(id UUID PK,slug UNIQUE,name,description,created_at,updated_at)`.
 - `environments(id,project_id FK,slug,name,is_production,UNIQUE(project_id,slug))`.
 - `services(id,project_id FK,environment_id FK,name,external_names JSONB,repository_url,created_at,UNIQUE(environment_id,name))`; проверка совпадения environment.project_id.
@@ -93,7 +93,7 @@ WebSocket hub ← DB/outbox events
 
 При `POST /incidents/{id}/investigations`:
 
-1. JWT identity → scope → role Developer/Admin → incident belongs to scope → incident not resolved / business policy.
+1. JWT identity → членство в проекте → право `investigation.run` → incident belongs to scope → incident not resolved / business policy.
 2. Проверить `Idempotency-Key` + request fingerprint, оптимистическую блокировку/уникальность; для нового run сформировать UUID и `attempt`.
 3. Одной транзакцией сохранить Investigation `pending`, default budget, context snapshot reference, dispatch job/outbox; сразу после commit вернуть `202` + `Location` (не ждать 20 минут).
 4. Dispatch worker берёт job через `FOR UPDATE SKIP LOCKED`/lease, вызывает AI REST Start (см. §12), retries с **тем же investigation_id**.
@@ -128,8 +128,8 @@ Backend хранит `integration` с `type`, endpoint (validated), project/envi
 
 ## 9. Security и isolation
 
-- Every read/write проверяет project membership + role, включая nested IDs, WS subscriptions, AI callback project binding.
-- Auth `/login` возвращает OTP challenge без JWT; verify единожды; refresh cookie rotation/revocation. Auth репозиторий не обязан хранить Investigation.
+- Every read/write проверяет project membership + право роли в этом проекте, включая nested IDs, WS subscriptions, AI callback project binding.
+- Auth `/login` принимает только email и возвращает OTP challenge без сессии; verify единожды и создаёт аккаунт для нового email; access и refresh только в HttpOnly-куках, ротация и отзыв refresh. Изменяющие запросы всех сервисов проверяют `Origin`. Auth не хранит Investigation.
 - Внутренний JWT c `aud=ai-backend` или `aud=main-ai-sink`, `sub=service-name`, короткий TTL, отдельная ротация; browser access token не принимается на internal API.
 - SQL queries параметризованные. Rate-limit per principal+project, bounded time window; API errors без stacktrace/secrets.
 - Audit: start, cancel, retry, review, resolve, integration changes, auth failures.
@@ -139,7 +139,7 @@ Backend хранит `integration` с `type`, endpoint (validated), project/envi
 
 | Этап | Deliverable | Проверка |
 |---|---|---|
-| B-01 | Auth façade + JWT/RBAC/project membership | OTP→me; Viewer forbidden |
+| B-01 | Auth (email OTP, куки) + JWT по JWKS + членство и права в проекте | OTP→me; участник без права → 403, не участник → 404 |
 | B-02 | Project/env/service registry | FK/scope CRUD + negative tests |
 | B-03 | Incident model + manual creation + list/detail | DB state, filters, cursor |
 | B-04 | Ingestion (alerts/deployments) | dedup, replay protection, time mapping |
@@ -163,7 +163,7 @@ Backend хранит `integration` с `type`, endpoint (validated), project/envi
 
 ### Что передать команде
 
-**Расулу:** versioned public OpenAPI + sample fixtures + test accounts roles + error/WS samples. **Олегу:** service auth credentials via secret config, internal REST schemas, event/result validators and shared fixtures. **Даниилу:** alert webhook contract, service mapping and telemetry labels, bounded test endpoints. См. [13_INTEGRATION_AND_HANDOFF.md](13_INTEGRATION_AND_HANDOFF.md).
+**Расулу:** versioned public OpenAPI + sample fixtures + тестовые проекты с участниками разных ролей + error/WS samples. **Олегу:** service auth credentials via secret config, internal REST schemas, event/result validators and shared fixtures. **Даниилу:** alert webhook contract, service mapping and telemetry labels, bounded test endpoints. См. [13_INTEGRATION_AND_HANDOFF.md](13_INTEGRATION_AND_HANDOFF.md).
 
 
 ## 12. Что выдать другим командам в виде точных файлов

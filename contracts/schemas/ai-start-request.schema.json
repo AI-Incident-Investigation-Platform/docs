@@ -57,88 +57,19 @@
       },
       "description": "Единый JSON error envelope для public/internal API; details sanitized"
     },
-    "User": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "format": "uuid"
-        },
-        "email": {
-          "type": "string",
-          "format": "email"
-        },
-        "display_name": {
-          "type": "string"
-        },
-        "role": {
-          "type": "string",
-          "enum": [
-            "admin",
-            "developer",
-            "viewer"
-          ]
-        },
-        "project_ids": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "format": "uuid"
-          }
-        },
-        "is_active": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "id",
-        "email",
-        "display_name",
-        "role",
-        "project_ids",
-        "is_active"
-      ],
-      "additionalProperties": false
-    },
     "LoginRequest": {
       "type": "object",
       "properties": {
         "email": {
           "type": "string",
-          "format": "email"
-        },
-        "password": {
-          "type": "string"
+          "format": "email",
+          "maxLength": 254
         }
       },
       "required": [
-        "email",
-        "password"
+        "email"
       ],
       "additionalProperties": false
-    },
-    "AuthTokens": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "access_token",
-        "token_type",
-        "expires_in"
-      ],
-      "properties": {
-        "access_token": {
-          "type": "string",
-          "minLength": 1
-        },
-        "token_type": {
-          "type": "string",
-          "const": "bearer"
-        },
-        "expires_in": {
-          "type": "integer",
-          "minimum": 1
-        }
-      }
     },
     "Project": {
       "type": "object",
@@ -2496,28 +2427,6 @@
       ],
       "additionalProperties": false
     },
-    "UsersPage": {
-      "type": "object",
-      "properties": {
-        "items": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/User"
-          }
-        },
-        "next_cursor": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "items",
-        "next_cursor"
-      ],
-      "additionalProperties": false
-    },
     "ProjectsPage": {
       "type": "object",
       "properties": {
@@ -2804,68 +2713,6 @@
       ],
       "additionalProperties": false
     },
-    "UserCreate": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "email",
-        "role",
-        "project_ids"
-      ],
-      "properties": {
-        "email": {
-          "type": "string",
-          "format": "email"
-        },
-        "display_name": {
-          "type": "string",
-          "maxLength": 150
-        },
-        "role": {
-          "type": "string",
-          "enum": [
-            "admin",
-            "developer",
-            "viewer"
-          ]
-        },
-        "project_ids": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "format": "uuid"
-          }
-        }
-      }
-    },
-    "UserPatch": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "display_name": {
-          "type": "string",
-          "maxLength": 150
-        },
-        "role": {
-          "type": "string",
-          "enum": [
-            "admin",
-            "developer",
-            "viewer"
-          ]
-        },
-        "project_ids": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "format": "uuid"
-          }
-        },
-        "is_active": {
-          "type": "boolean"
-        }
-      }
-    },
     "IntegrationPatch": {
       "type": "object",
       "additionalProperties": false,
@@ -3070,7 +2917,7 @@
         "masked_email": {
           "type": "string",
           "maxLength": 254,
-          "description": "Partially masked verified email, displayed only after valid credentials."
+          "description": "Partially masked email the code was sent to; the same for registered and new emails."
         },
         "expires_in": {
           "type": "integer",
@@ -3156,25 +3003,53 @@
     "OtpProblemCode": {
       "type": "string",
       "enum": [
-        "invalid_credentials",
         "otp_invalid",
         "otp_expired",
         "otp_rate_limited",
         "otp_delivery_unavailable",
         "otp_challenge_invalid",
+        "origin_forbidden",
+        "unauthenticated",
         "validation_error"
       ]
     },
-    "WSTicketAck": {
+    "AuthSession": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "expires_in"
+        "user",
+        "account_created"
       ],
       "properties": {
-        "expires_in": {
-          "type": "integer",
-          "const": 30
+        "user": {
+          "$ref": "#/$defs/AuthUser"
+        },
+        "account_created": {
+          "type": "boolean",
+          "description": "True when this verification created the account (first sign-in)."
+        }
+      }
+    },
+    "AuthUser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "email",
+        "created_at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "email": {
+          "type": "string",
+          "format": "email"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
         }
       }
     }

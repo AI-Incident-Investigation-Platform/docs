@@ -4,7 +4,7 @@
 
 ## Auth/handshake
 
-Frontend сначала получает cookie через `POST /api/v1/auth/ws-ticket` (bearer access), затем открывает `wss://<same-origin>/ws/v1/events`. Ticket одноразовый, до 30 секунд, HttpOnly, Origin-checked и проверяется на действующую session. Нет токенов в query string и нет прямых подключений браузера к AI.
+Frontend открывает `wss://<same-origin>/ws/v1/events`; браузер сам прикладывает HttpOnly-куку `access_token` (`Path=/`). При handshake сервер проверяет `Origin` по allowlist, подпись и срок JWT, живость сессии, а при каждой подписке — права в проекте. Отдельного WS-ticket нет. Истёк access — сервер закрывает соединение с кодом `4401`, клиент делает `POST /api/v1/auth/refresh` и переподключается с дочиткой по REST. Нет токенов в query string и нет прямых подключений браузера к AI. Подробно — [AUTH_BOUNDARY.md](AUTH_BOUNDARY.md#websocket).
 
 ## Сообщения
 

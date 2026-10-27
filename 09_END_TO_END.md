@@ -85,7 +85,7 @@ Main сохранит `pending` и dispatch job, AI на Start ответит `4
 
 ## 7. Один реально проверяемый end-to-end сценарий для команды
 
-**Предусловия:** k3d ready, payment service healthy, test project/environment/service mapping, Main/AI internal auth, MCP с Loki/Prometheus/Tempo, браузер Developer/Viewer.
+**Предусловия:** k3d ready, payment service healthy, test project/environment/service mapping, Main/AI internal auth, MCP с Loki/Prometheus/Tempo, браузер участников проекта с правами запуска и только чтения.
 
 | № | Исполнитель | Действие | Что проверить |
 |---|---|---|---|

@@ -6,7 +6,7 @@
 
 | Gate | Владелец | До готовности нужно доказать |
 |---|---|---|
-| FE-A Auth/Incident UI | Расул | OTP states, typed API, incident list/detail, role guard |
+| FE-A Auth/Incident UI | Расул | OTP states, typed API, incident list/detail, permission guard |
 | BE-A Domain/Start | Юрий | migrations, scoped incident, durable Start+dedup, dispatch retries |
 | AI-G01 Local investigation | Олег | graph with fake MCP, Evidence-linked RCA/inconclusive, budgets/cancel |
 | INF-A Source readiness | Даниил | payment healthy/fault, Loki real logs, Prometheus metrics, Tempo traces |
@@ -20,8 +20,8 @@
 
 | File | Assertions |
 |---|---|
-| `auth-login-challenge.json` | HTTP 202; no JWT; masked email; expires_in |
-| `auth-otp-verify.json` | access only post-verify; refresh HttpOnly cookie checked separately |
+| `auth-login-challenge.json` | HTTP 202; no cookies; masked email; expires_in; same body for known and new email |
+| `auth-otp-verify.json` | session only post-verify; `{user, account_created}` in body, access and refresh only as HttpOnly cookies |
 | `incident.json` | project/environment/service IDs, severity and incident status |
 | `investigation-pending.json` | new UUID, attempt, budget, no premature RCA |
 | `ai-start.json` | schema_version, project scope, time window, budget |
@@ -35,9 +35,9 @@
 
 ## 3. Тестовые сценарии пользовательской системы
 
-### CT-01 — Login требует OTP
+### CT-01 — Вход и регистрация по коду
 
-Given active user, when valid password supplied, then 202 challenge **without JWT**; before OTP GET `/users/me` returns 401; valid 6-digit code issues session once; repeat OTP returns 410/401; refresh continues existing session without another OTP; logout revokes refresh; Viewer cannot write.
+Given any email (registered or not), when `POST /auth/login {email}`, then the same 202 challenge **without cookies**; before OTP GET `/auth/me` returns 401; valid 6-digit code issues session once and creates the account if the email was new (`account_created: true`, exactly one user under parallel verify); repeat OTP returns 410/401; refresh continues existing session without another OTP; logout revokes refresh; no token ever appears in a response body; state-changing request with foreign `Origin` returns 403; project member without `review.write` cannot write a review.
 
 ### CT-02 — Cross-project authorization
 
@@ -133,4 +133,4 @@ python -m pip install 'pyyaml>=6' 'jsonschema[format]>=4.22'
 python contracts/tests/validate_contracts.py
 ```
 
-Проверяем: ссылки, структуры JSON/OpenAPI, типы событий и результат `event_id`+`finished_at`, актуальные Loki/Kubernetes source types, Refresh через cookie, наличие `ws-ticket`. Результат здесь проверяет **документацию**, а не живые сервисы. Для реальной приёмки обязателен Main↔AI callback replay, WS reconnect, инцидентный auth/scope, управляемые сценарии Demo Payment Service. См. [contracts/CONTRACT_MATRIX.md](contracts/CONTRACT_MATRIX.md).
+Проверяем: ссылки, структуры JSON/OpenAPI, типы событий и результат `event_id`+`finished_at`, актуальные Loki/Kubernetes source types, сессия только в куках, вход без пароля, отсутствие `ws-ticket` и Bearer у браузера. Результат здесь проверяет **документацию**, а не живые сервисы. Для реальной приёмки обязателен Main↔AI callback replay, WS reconnect, инцидентный auth/scope, управляемые сценарии Demo Payment Service. См. [contracts/CONTRACT_MATRIX.md](contracts/CONTRACT_MATRIX.md).

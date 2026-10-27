@@ -14,7 +14,7 @@
 | Слой | Что обязательно | Как проверить |
 |---|---|---|
 | Product/Domain | Project/Environment/Service/Incident/Investigation, базовые интеграции | создание и навигация по сущностям |
-| Auth/Security | email + password + 6-digit OTP каждый новый login, RBAC, project scope | end-to-end login, forbidden cases |
+| Auth/Security | вход и регистрация по email + 6-digit OTP без пароля, сессия в HttpOnly-куках, права внутри проекта, project scope | end-to-end login, forbidden cases |
 | Intake | generic/Alertmanager alert, dedup, базовая информация о deployment | реальный тестовый webhook |
 | Main Backend | REST для UI, долговечные events/RCA/review, WebSocket | history + reconnect + review |
 | AI | LangGraph single ReAct, MCP read-only, бюджеты, Evidence, RCA/inconclusive | сценарий с fake tool + live smoke |
