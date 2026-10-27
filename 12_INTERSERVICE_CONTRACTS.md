@@ -54,9 +54,9 @@
 | POST | `/api/v1/auth/logout` | кука `refresh_token` | `204`, сессия отозвана, куки очищены |
 | GET | `/api/v1/auth/me` | кука `access_token` | `{id,email,created_at}` |
 
-**Безопасность.** Токены только в HttpOnly-куках: `access_token` (JWT 15 минут, `Path=/`) и `refresh_token` (30 дней, `Path=/api/v1/auth`), обе `Secure`, `SameSite=Strict`. В тело ответа, URL, `localStorage` и JS токены не попадают, Bearer у браузера нет. Каждый изменяющий запрос любого сервиса проверяет `Origin` по allowlist (`403 origin_forbidden`) — это CSRF-защита, отдельного CSRF-токена нет. WebSocket аутентифицируется той же кукой `access_token` с проверкой `Origin`; WS-ticket не используется.
+**Безопасность.** Токены только в HttpOnly-куках: `access_token` (JWT 15 минут, `Path=/`) и `refresh_token` (30 дней, `Path=/api/v1/auth`), обе `Secure`, `SameSite=Strict`. В тело ответа, URL, `localStorage` и JS токены не попадают, Bearer у браузера нет. Каждый изменяющий запрос любого сервиса проверяет `Origin` по allowlist (`403 security.origin_forbidden`) — это CSRF-защита, отдельного CSRF-токена нет. WebSocket аутентифицируется той же кукой `access_token` с проверкой `Origin`; WS-ticket не используется.
 
-**OTP baseline:** 6 цифр строкой, TTL 300 с, 5 попыток, resend не чаще 60 с, максимум 3 resend, lifetime challenge ≤900 с. Только серверный digest, consume единожды, лимит запросов кода по email и клиенту (`429` + `Retry-After`). Письмо с кодом отправляет сервис `email`: `auth` кладёт задачу в RabbitMQ и отвечает `202` после подтверждения брокера; брокер недоступен — `503 otp_delivery_unavailable`.
+**OTP baseline:** 6 цифр строкой, TTL 300 с, 5 попыток, resend не чаще 60 с, максимум 3 resend, lifetime challenge ≤900 с. Только серверный digest, consume единожды, лимит запросов кода по email и клиенту (`429` + `Retry-After`). Письмо с кодом отправляет сервис `email`: `auth` кладёт задачу в RabbitMQ и отвечает `202` после подтверждения брокера; брокер недоступен — `503 email.unavailable`.
 
 ## 4. Основные публичные маршруты и владельцы
 

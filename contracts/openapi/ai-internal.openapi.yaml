@@ -209,8 +209,23 @@ components:
               type: object
               additionalProperties: true
       description: Единый JSON error envelope для public/internal API; details sanitized
-    User:
+    LoginRequest:
       type: object
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+      required:
+      - email
+      additionalProperties: false
+    AuthUser:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - email
+      - created_at
       properties:
         id:
           type: string
@@ -218,58 +233,21 @@ components:
         email:
           type: string
           format: email
-        display_name:
+        created_at:
           type: string
-        role:
-          type: string
-          enum:
-          - admin
-          - developer
-          - viewer
-        project_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
-        is_active:
+          format: date-time
+    AuthSession:
+      type: object
+      additionalProperties: false
+      required:
+      - user
+      - account_created
+      properties:
+        user:
+          $ref: '#/components/schemas/AuthUser'
+        account_created:
           type: boolean
-      required:
-      - id
-      - email
-      - display_name
-      - role
-      - project_ids
-      - is_active
-      additionalProperties: false
-    LoginRequest:
-      type: object
-      properties:
-        email:
-          type: string
-          format: email
-        password:
-          type: string
-      required:
-      - email
-      - password
-      additionalProperties: false
-    AuthTokens:
-      type: object
-      additionalProperties: false
-      required:
-      - access_token
-      - token_type
-      - expires_in
-      properties:
-        access_token:
-          type: string
-          minLength: 1
-        token_type:
-          type: string
-          const: bearer
-        expires_in:
-          type: integer
-          minimum: 1
+          description: True when this verification created the account (first sign-in).
     Project:
       type: object
       properties:
@@ -1994,21 +1972,6 @@ components:
       - items
       - next_cursor
       additionalProperties: false
-    UsersPage:
-      type: object
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/User'
-        next_cursor:
-          type:
-          - string
-          - 'null'
-      required:
-      - items
-      - next_cursor
-      additionalProperties: false
     ProjectsPage:
       type: object
       properties:
@@ -2204,51 +2167,6 @@ components:
       - items
       - next_cursor
       additionalProperties: false
-    UserCreate:
-      type: object
-      additionalProperties: false
-      required:
-      - email
-      - role
-      - project_ids
-      properties:
-        email:
-          type: string
-          format: email
-        display_name:
-          type: string
-          maxLength: 150
-        role:
-          type: string
-          enum:
-          - admin
-          - developer
-          - viewer
-        project_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
-    UserPatch:
-      type: object
-      additionalProperties: false
-      properties:
-        display_name:
-          type: string
-          maxLength: 150
-        role:
-          type: string
-          enum:
-          - admin
-          - developer
-          - viewer
-        project_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
-        is_active:
-          type: boolean
     IntegrationPatch:
       type: object
       additionalProperties: false
@@ -2397,7 +2315,7 @@ components:
         masked_email:
           type: string
           maxLength: 254
-          description: Partially masked verified email, displayed only after valid credentials.
+          description: Partially masked email the code was sent to; the same for registered and new emails.
         expires_in:
           type: integer
           minimum: 1
@@ -2461,22 +2379,17 @@ components:
     OtpProblemCode:
       type: string
       enum:
-      - invalid_credentials
-      - otp_invalid
-      - otp_expired
-      - otp_rate_limited
-      - otp_delivery_unavailable
-      - otp_challenge_invalid
-      - validation_error
-    WSTicketAck:
-      type: object
-      additionalProperties: false
-      required:
-      - expires_in
-      properties:
-        expires_in:
-          type: integer
-          const: 30
+      - auth.otp_invalid
+      - auth.otp_expired
+      - auth.challenge_invalid
+      - auth.otp_rate_limited
+      - email.unavailable
+      - security.origin_forbidden
+      - security.not_authenticated
+      - auth.invalid_refresh_token
+      - auth.refresh_token_reused
+      - auth.account_not_found
+      - request.invalid
   securitySchemes:
     ServiceAuth:
       type: http

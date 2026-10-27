@@ -15,11 +15,11 @@ Backend — набор микросервисов за общим gateway (Traef
 Пароля нет. Вход и регистрация — один и тот же поток.
 
 1. `POST /api/v1/auth/login {email}` → `202 LoginChallenge {challenge_id, masked_email, delivery_status, expires_in, resend_after}`. Ответ одинаковый для зарегистрированного и нового email. Куки не ставятся.
-2. Auth кладёт в RabbitMQ задачу на письмо с кодом и отвечает `202` только после подтверждения брокера (publisher confirm). Брокер недоступен — `503 otp_delivery_unavailable`, challenge удаляется.
+2. Auth кладёт в RabbitMQ задачу на письмо с кодом и отвечает `202` только после подтверждения брокера (publisher confirm). Брокер недоступен — `503 email.unavailable`, challenge удаляется.
 3. `POST /api/v1/auth/otp/verify {challenge_id, code}` → `200 AuthSession {user, account_created}` и куки сессии. Если пользователя с этим email не было, он создаётся здесь (`account_created: true`). Неподтверждённых аккаунтов не существует: пока код не введён, есть только challenge.
 4. `POST /api/v1/auth/otp/resend {challenge_id}` → `202`, прежний код недействителен.
 
-**OTP:** 6 цифр строкой (ведущий ноль значим), TTL 300 с, 5 неверных попыток гасят challenge, resend не чаще 60 с и не больше 3 раз, challenge живёт не больше 900 с. На сервере хранится только digest кода, код проверяется и гасится атомарно один раз. Лимит запросов кода — по email и по клиенту, сверх лимита `429 otp_rate_limited` с `Retry-After`: каждое письмо стоит денег и квоты провайдера.
+**OTP:** 6 цифр строкой (ведущий ноль значим), TTL 300 с, 5 неверных попыток гасят challenge, resend не чаще 60 с и не больше 3 раз, challenge живёт не больше 900 с. На сервере хранится только digest кода, код проверяется и гасится атомарно один раз. Лимит запросов кода — по email и по клиенту, сверх лимита `429 auth.otp_rate_limited` с `Retry-After`: каждое письмо стоит денег и квоты провайдера.
 
 ## Сессия — только HttpOnly-куки
 
@@ -36,7 +36,7 @@ Backend — набор микросервисов за общим gateway (Traef
 
 ## CSRF
 
-Сессия в куке, поэтому каждый изменяющий запрос (`POST`, `PUT`, `PATCH`, `DELETE`) любого сервиса проверяет заголовок `Origin` по allowlist. Нет `Origin` или он чужой — `403 origin_forbidden`. Вместе с `SameSite=Strict` это закрывает межсайтовые запросы; отдельный CSRF-токен не нужен.
+Сессия в куке, поэтому каждый изменяющий запрос (`POST`, `PUT`, `PATCH`, `DELETE`) любого сервиса проверяет заголовок `Origin` по allowlist. Нет `Origin` или он чужой — `403 security.origin_forbidden`. Вместе с `SameSite=Strict` это закрывает межсайтовые запросы; отдельный CSRF-токен не нужен.
 
 ## WebSocket
 

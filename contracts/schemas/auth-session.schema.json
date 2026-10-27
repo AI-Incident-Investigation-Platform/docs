@@ -3003,14 +3003,17 @@
     "OtpProblemCode": {
       "type": "string",
       "enum": [
-        "otp_invalid",
-        "otp_expired",
-        "otp_rate_limited",
-        "otp_delivery_unavailable",
-        "otp_challenge_invalid",
-        "origin_forbidden",
-        "unauthenticated",
-        "validation_error"
+        "auth.otp_invalid",
+        "auth.otp_expired",
+        "auth.challenge_invalid",
+        "auth.otp_rate_limited",
+        "email.unavailable",
+        "security.origin_forbidden",
+        "security.not_authenticated",
+        "auth.invalid_refresh_token",
+        "auth.refresh_token_reused",
+        "auth.account_not_found",
+        "request.invalid"
       ]
     },
     "AuthSession": {
