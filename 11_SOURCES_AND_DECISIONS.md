@@ -26,10 +26,11 @@
 | V2-04 | MCP Server — отдельный внутренний read-only сервис AI workstream | 06, 08 |
 | V2-05 | Source logs = Loki, metrics = Prometheus, traces = Tempo | 06, 08 |
 | V2-06 | Main PG для Incident/Evidence/RCA/Review, AI PG для checkpoints/registry | 05, 06 |
-| V2-07 | Без пароля: email → OTP, одно окно входа и регистрации; access и refresh только в HttpOnly-куках | 04, 12, AUTH_BOUNDARY |
+| V2-07 | Без пароля: email → OTP; регистрация и вход — разные экраны, смена почты кодами с обеих почт; access и refresh только в HttpOnly-куках | 04, 12, AUTH_BOUNDARY |
 | V2-08 | WS auth той же кукой `access_token` + Origin check, без ticket | 04, 12, WEBSOCKET |
 | V2-13 | Глобальных ролей нет: проект создаёт любой, owner + роли-наборы прав внутри проекта | 02, 12 §7, AUTH_BOUNDARY |
 | V2-14 | Backend — микросервисы за gateway, наружу один API; письма — сервис `email` через RabbitMQ и Resend | 05, 12 §1 |
+| V2-15 | `auth` — только вход; профиль и поиск людей — сервис `users` по событиям `auth`; приглашают только зарегистрированных, по письму с принятием | 05, 12, AUTH_BOUNDARY |
 | V2-09 | AI busy отвечает 429; Main pending dispatcher retries boundedly | 05, 12 |
 | V2-10 | Result callback + GET readback, terminal WS только после DB commit | 05, 06, 12 |
 | V2-11 | 20 agent steps / 40 tool calls / 1200sec, один active executor | 06 |

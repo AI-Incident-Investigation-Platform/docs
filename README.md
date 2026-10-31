@@ -72,7 +72,7 @@ flowchart LR
 | MCP | Внутренний AI-owned Streamable HTTP Server, read-only |
 | Логи | **Loki**, не Elasticsearch из исторических схем |
 | Метрики / трейсы | Prometheus / Tempo через существующий Alloy |
-| Auth | Без пароля: email → код на почту, одно окно входа и регистрации; access и refresh только в HttpOnly-куках |
+| Auth | Без пароля: email → код на почту, регистрация и вход — разные экраны, смена почты двумя кодами; access и refresh только в HttpOnly-куках |
 | WebSocket auth | та же кука `access_token` + проверка `Origin`, без WS-ticket |
 | Доступ | Глобальных ролей нет: проект создаёт любой пользователь и становится owner, роли — наборы прав внутри проекта ([AUTH_BOUNDARY](contracts/AUTH_BOUNDARY.md)) |
 | Backend | микросервисы за gateway, наружу один API `/api/v1`; письма — сервис `email` через RabbitMQ |

@@ -11,7 +11,7 @@
 | Олег, AI Backend | LangGraph, LLM adapter, MCP client/server, durable executor, result/outbox | internal REST mock+schema, event/result examples, read-only tool catalog, E2E run | users/auth, browser WS, auto-remediation |
 | Даниил, Infra/Demo | k3d, databases/monitoring, payment-demo, controlled faults | accessible service endpoint, project/env/service mapping, observed Loki/Prom/Tempo labels, scenario ground truth to evaluator only | model prompts/agent decisions, Main domain |
 
-Сервис `auth` (Юрий): вход и регистрация по email-коду без пароля, сессии в HttpOnly-куках, JWKS; письма отправляет сервис `email` (Юрий) через RabbitMQ. Публичные пути — единый API `/api/v1/auth/*` ([AUTH_BOUNDARY](contracts/AUTH_BOUNDARY.md)); это не повод Frontend начать собственный login backend.
+Сервис `auth` (Юрий): регистрация, вход и смена почты по email-коду без пароля, сессии в HttpOnly-куках, JWKS; профиль и поиск людей — сервис `users` (Юрий); письма отправляет сервис `email` (Юрий) через RabbitMQ. Публичные пути — единый API `/api/v1/auth/*` ([AUTH_BOUNDARY](contracts/AUTH_BOUNDARY.md)); это не повод Frontend начать собственный login backend.
 
 ## 2. Единый контрактный процесс
 

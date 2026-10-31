@@ -17,7 +17,10 @@ Browser → HTTPS /api/v1/* → Main Backend → AI Backend
 
 | Route (пример стабильного client routing) | Экран | Основные серверные данные | P |
 |---|---|---|---|
-| `/login` | Email — одно окно входа и регистрации | auth/login, 202 challenge | P0 |
+| `/login` | Email зарегистрированного — вход | auth/login, 202 challenge; 404 → предложить регистрацию | P0 |
+| `/register` | Email новой почты — регистрация | auth/register, 202 challenge; 409 → предложить вход | P0 |
+| `/onboarding/profile` | Юзернейм (подставлен из почты), аватар, имя, часовой пояс, рабочее время | GET/PATCH users/me, PUT/DELETE users/me/avatar, users/username-availability | P0 |
+| `/invitations` | Входящие приглашения в проекты: принять или отклонить | GET invitations, accept, decline | P0 |
 | `/verify-email` | Шесть цифр OTP | otp/verify, otp/resend | P0 |
 | `/overview` | Dashboard | GET overview, incidents | P0 |
 | `/incidents` | Incident registry | GET incidents filter/cursor | P0 |
@@ -63,7 +66,7 @@ src/
 
 Сессия — только HttpOnly-куки `access_token` и `refresh_token`; JS их не видит, заголовка `Authorization` нет ([AUTH_BOUNDARY](contracts/AUTH_BOUNDARY.md)). `apiClient` обязан: отправлять все запросы same-origin с `credentials: "include"`, сохранять `X-Request-ID`, разбивать ошибки по `error.code`, отменять запрос через `AbortSignal`, не повторять автоматически неидемпотентные POST. Обработка refresh: одна `refreshPromise` (`POST /api/v1/auth/refresh`) на все конкурентные 401; после неудачного refresh сбросить кэш и вернуть на `/login`; повторять исходный GET/безопасный запрос один раз. `403 security.origin_forbidden` — ошибка конфигурации origin, а не прав.
 
-**OTP flow:** пароля нет; `/login` спрашивает только email, вход и регистрация — один экран. После `POST login` показывать masked email и таймер resend; на response 202 **не** открывать продукт. OTP вводить строкой (ведущий ноль возможен); 410 → новый вход, 429 → cooldown из `Retry-After`, 401 → неверный код (`details.attempts_left`). `account_created: true` в ответе verify — первый вход: показать онбординг (создать проект или принять приглашение). Refresh страницы на `/verify-email`: challenge ID хранить только в session state или предлагать повторный login, OTP никогда не сохранять.
+**OTP flow:** пароля нет; `/login` и `/register` спрашивают только email и шлют код на разные ручки (`auth/login` и `auth/register`). После `POST` показывать masked email и таймер resend; на response 202 **не** открывать продукт. OTP вводить строкой (ведущий ноль возможен); 410 → новый вход, 429 → cooldown из `Retry-After`, 401 → неверный код (`details.attempts_left`). `account_created: true` в ответе verify — регистрация: показать форму профиля (`GET`/`PATCH /users/me`, аватар — `PUT /users/me/avatar` телом-картинкой, обрезать и сжать до 1 МиБ на клиенте; без аватара показывать инициалы), затем онбординг (создать проект или принять приглашение). Пустой `onboarded_at` у профиля при входе — снова показать форму профиля. Refresh страницы на `/verify-email`: challenge ID хранить только в session state или предлагать повторный login, OTP никогда не сохранять.
 
 **WS:** после входа открыть `wss://<same-origin>/ws/v1/events` — кука `access_token` уходит сама, ticket не нужен. Закрытие с кодом `4401` → `refresh`, затем переподключение с REST-дочиткой. Ничего не класть в URL.
 

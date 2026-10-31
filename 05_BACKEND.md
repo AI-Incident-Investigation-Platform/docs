@@ -33,7 +33,7 @@ WebSocket hub ← DB/outbox events
 
 ### Registry / scopes
 
-- `users`/`sessions`/`otp_challenges` принадлежат сервису `auth`; паролей нет. Сервис проектов хранит `project_memberships(user_id,project_id,role_id)`, роли проекта с набором прав, приглашения по email и API-токены проекта (только хэш). Глобальной роли у пользователя нет; создатель проекта — owner.
+- `users(id,email)`/`sessions`/`otp_challenges` принадлежат сервису `auth`; паролей нет. Профиль (юзернейм, имя, часовой пояс, рабочее время, копия почты) — в сервисе `users`, его создаёт событие `user.registered`. Сервис проектов хранит `project_memberships(user_id,project_id,role_id)`, роли проекта с набором прав, приглашения зарегистрированных пользователей по `user_id` и API-токены проекта (только хэш). Глобальной роли у пользователя нет; создатель проекта — owner.
 - `projects(id UUID PK,slug UNIQUE,name,description,created_at,updated_at)`.
 - `environments(id,project_id FK,slug,name,is_production,UNIQUE(project_id,slug))`.
 - `services(id,project_id FK,environment_id FK,name,external_names JSONB,repository_url,created_at,UNIQUE(environment_id,name))`; проверка совпадения environment.project_id.

@@ -2315,7 +2315,7 @@ components:
         masked_email:
           type: string
           maxLength: 254
-          description: Partially masked email the code was sent to; the same for registered and new emails.
+          description: Partially masked email the code was sent to.
         expires_in:
           type: integer
           minimum: 1

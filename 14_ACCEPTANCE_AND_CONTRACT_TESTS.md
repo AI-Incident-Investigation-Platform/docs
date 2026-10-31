@@ -37,7 +37,7 @@
 
 ### CT-01 — Вход и регистрация по коду
 
-Given any email (registered or not), when `POST /auth/login {email}`, then the same 202 challenge **without cookies**; before OTP GET `/auth/me` returns 401; valid 6-digit code issues session once and creates the account if the email was new (`account_created: true`, exactly one user under parallel verify); repeat OTP returns 410/401; refresh continues existing session without another OTP; logout revokes refresh; no token ever appears in a response body; state-changing request with foreign `Origin` returns 403; project member without `review.write` cannot write a review.
+Given a new email, `POST /auth/register` returns 202 **without cookies** and a registered one 409; `POST /auth/login` returns 202 for a registered email and 404 for an unknown one; before OTP GET `/auth/me` returns 401; a valid 6-digit code issues the session once, and a registration code creates the account (`account_created: true`, exactly one user under parallel verify) and its profile in `users`; email change requires codes from both the current and the new email and revokes other sessions; repeat OTP returns 410/401; refresh continues existing session without another OTP; logout revokes refresh; no token ever appears in a response body; state-changing request with foreign `Origin` returns 403; project member without `review.write` cannot write a review.
 
 ### CT-02 — Cross-project authorization
 

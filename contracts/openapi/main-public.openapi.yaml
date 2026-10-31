@@ -11,7 +11,10 @@ security:
 - CookieAuth: []
 tags:
 - name: Auth
+- name: Users
 - name: Projects
+- name: Members
+- name: Invitations
 - name: Environments
 - name: Services
 - name: Deployments
@@ -25,15 +28,71 @@ tags:
 - name: Ingestion
 - name: Internal callbacks
 paths:
+  /api/v1/auth/register:
+    post:
+      tags:
+      - Auth
+      summary: Start registration of a new email and send a one-time code (NO session)
+      operationId: post_api_v1_auth_register
+      description: The account is created only by a successful /auth/otp/verify of this challenge, so unconfirmed
+        accounts do not exist. Cookies are never set here.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '202':
+          description: Code delivery queued; no session issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginChallenge'
+        '409':
+          description: Email is already registered (auth.email_taken)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: Invalid email (request.invalid)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '429':
+          description: Too many codes requested for this email or client (auth.otp_rate_limited)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+        '503':
+          description: Code delivery path unavailable (email.unavailable); nothing was sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
   /api/v1/auth/login:
     post:
       tags:
       - Auth
-      summary: Start sign-in or sign-up by email and send a one-time code (NO session)
+      summary: Start sign-in of a registered email and send a one-time code (NO session)
       operationId: post_api_v1_auth_login
-      description: One entry point for both sign-in and sign-up; there are no passwords. The response is the same
-        whether the email is registered or not. The account is created only by a successful /auth/otp/verify, so
-        unconfirmed accounts do not exist. Cookies are never set here.
+      description: Sign-in only; registration is /auth/register. There are no passwords. An unknown email gets 404
+        auth.email_not_registered. Cookies are never set here.
       security: []
       requestBody:
         required: true
@@ -50,6 +109,12 @@ paths:
                 $ref: '#/components/schemas/LoginChallenge'
         '403':
           description: Origin not allowed (security.origin_forbidden)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: Email is not registered (auth.email_not_registered)
           content:
             application/json:
               schema:
@@ -88,9 +153,10 @@ paths:
       tags:
       - Auth
       operationId: verifyEmailOtp
-      summary: Verify the one-time code, create the account if new, and open a session
+      summary: Verify the one-time code of sign-in or registration and open a session
       description: The only endpoint that opens a session. Verification is atomic and one-time, bound to the
-        challenge from /auth/login. For an unknown email the account is created here (account_created=true).
+        challenge from /auth/login or /auth/register. A registration code creates the account here
+        (account_created=true) and publishes user.registered; the users service then creates the profile.
         Tokens are never returned in the body; both are set as HttpOnly cookies.
       security: []
       requestBody:
@@ -131,13 +197,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Problem'
-        '429':
-          description: Too many attempts (auth.otp_rate_limited)
-          headers:
-            Retry-After:
+        '409':
+          description: The email was registered meanwhile (auth.email_taken)
+          content:
+            application/json:
               schema:
-                type: integer
-                minimum: 1
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: Registration event not confirmed by the broker (events.unavailable); no account created
           content:
             application/json:
               schema:
@@ -277,6 +344,418 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Problem'
+  /api/v1/auth/email/change:
+    post:
+      tags:
+      - Auth
+      summary: 'Start email change: codes go to the current and the new email'
+      operationId: post_api_v1_auth_email_change
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailChangeRequest'
+      responses:
+        '202':
+          description: Both codes queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailChangeChallenge'
+        '401':
+          description: No session (security.not_authenticated)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: New email is already registered (auth.email_taken)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: New email equals the current one (auth.email_unchanged) or invalid (request.invalid)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '429':
+          description: Too many codes for one of the emails (auth.otp_rate_limited)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: Code delivery path unavailable (email.unavailable)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /api/v1/auth/email/change/verify:
+    post:
+      tags:
+      - Auth
+      summary: Confirm email change with both codes; other sessions are revoked
+      operationId: post_api_v1_auth_email_change_verify
+      description: code is from the current email, new_code from the new one; they are not interchangeable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailChangeVerifyRequest'
+      responses:
+        '200':
+          description: Email changed; user.email_changed published, the old email is notified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthUser'
+        '401':
+          description: A code is wrong (auth.otp_invalid) or no session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: New email was registered meanwhile (auth.email_taken)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '410':
+          description: Challenge expired, used, of another session or not an email change (auth.challenge_invalid,
+            auth.otp_expired)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: Event not confirmed by the broker (events.unavailable); email unchanged
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /api/v1/users/me:
+    get:
+      tags:
+      - Users
+      summary: Own profile
+      operationId: get_api_v1_users_me
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '503':
+          description: 'No profile yet and auth unavailable to create it from (auth.unavailable)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    patch:
+      tags:
+      - Users
+      summary: Save own profile; the first save completes onboarding
+      operationId: patch_api_v1_users_me
+      description: Partial update. Fields not sent stay as they are; null clears display_name and working_hours,
+        and is rejected for username and timezone.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileUpdate'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '409':
+          description: Username taken (user.username_taken)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: Invalid username, timezone or working hours (request.invalid)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /api/v1/users/me/avatar:
+    put:
+      tags:
+      - Users
+      summary: 'Upload own avatar: the body is the image itself'
+      operationId: put_api_v1_users_me_avatar
+      description: PNG, JPEG or WebP up to 1 MiB; the format is checked by content and must match Content-Type. The
+        frontend crops and compresses before upload. Every upload gets a new avatar_url.
+      requestBody:
+        required: true
+        content:
+          image/png:
+            schema:
+              type: string
+              format: binary
+          image/jpeg:
+            schema:
+              type: string
+              format: binary
+          image/webp:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Profile with the new avatar_url
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '422':
+          description: Not an image of the declared type (user.avatar_invalid) or too large (user.avatar_too_large,
+            details.max_bytes)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: File storage unavailable (storage.unavailable)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    delete:
+      tags:
+      - Users
+      summary: Remove own avatar
+      operationId: delete_api_v1_users_me_avatar
+      responses:
+        '204':
+          description: Removed; repeating is safe
+        default:
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /api/v1/users/{user_id}/avatar:
+    get:
+      tags:
+      - Users
+      summary: Avatar image; use avatar_url from the profile
+      operationId: get_api_v1_users_user_id_avatar
+      description: avatar_url carries ?v=<version>, so the response is cached as immutable.
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: v
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Image
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: No avatar (user.avatar_not_found)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /api/v1/users/username-availability:
+    get:
+      tags:
+      - Users
+      summary: Is the username free (own username counts as free)
+      operationId: get_api_v1_users_username_availability
+      parameters:
+      - name: username
+        in: query
+        required: true
+        schema:
+          $ref: '#/components/schemas/Username'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsernameAvailability'
+        default:
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /api/v1/users:
+    get:
+      tags:
+      - Users
+      summary: Find people by username or email prefix, or part of the name
+      operationId: get_api_v1_users
+      parameters:
+      - name: q
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 100
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 20
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsersPage'
+        default:
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /api/v1/users/lookup:
+    get:
+      tags:
+      - Users
+      summary: Profiles by a list of ids (member lists); unknown ids are skipped
+      operationId: get_api_v1_users_lookup
+      parameters:
+      - name: ids
+        in: query
+        required: true
+        style: form
+        explode: true
+        schema:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsersList'
+        default:
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /api/v1/users/{user_id}:
+    get:
+      tags:
+      - Users
+      summary: Profile by id
+      operationId: get_api_v1_users_user_id
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '404':
+          description: No such user (user.not_found)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
   /api/v1/projects:
     get:
       tags:
@@ -387,7 +866,468 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ProjectWrite'
+              $ref: '#/components/schemas/ProjectPatch'
+  /api/v1/projects/{project_id}/api-tokens:
+    get:
+      tags:
+      - ApiTokens
+      summary: List project API tokens, revoked included (api_token.manage)
+      operationId: get_api_v1_projects_project_id_api_tokens
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiTokensPage'
+        default:
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+    post:
+      tags:
+      - ApiTokens
+      summary: Issue project API token (api_token.manage); the secret is returned only here
+      description: The secret is sent by external monitoring as X-Ingest-Key. Only its SHA-256 is stored.
+        The response carries Cache-Control no-store.
+      operationId: post_api_v1_projects_project_id_api_tokens
+      responses:
+        '201':
+          description: Issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiTokenIssued'
+        default:
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiTokenCreate'
+  /api/v1/projects/{project_id}/api-tokens/{token_id}:
+    delete:
+      tags:
+      - ApiTokens
+      summary: Revoke project API token (api_token.manage); idempotent, the token stays listed
+      operationId: delete_api_v1_projects_project_id_api_tokens_token_id
+      responses:
+        '204':
+          description: Revoked
+        default:
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: token_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+  /api/v1/projects/{project_id}/members:
+    get:
+      tags:
+      - Members
+      summary: Project members with roles (project.read)
+      operationId: get_api_v1_projects_project_id_members
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MembersList'
+        default:
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /api/v1/projects/{project_id}/members/{user_id}:
+    patch:
+      tags:
+      - Members
+      summary: Change member role (member.manage, within own permissions)
+      operationId: patch_api_v1_projects_project_id_members_user_id
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberUpdate'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Member'
+        '403':
+          description: No member.manage or the role is wider than own permissions (access.permission_denied, access.role_not_grantable)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: No such member (member.not_found) or project (project.not_found)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: Own role (member.own_role), unknown role (member.role_invalid) or the last owner (member.last_owner)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    delete:
+      tags:
+      - Members
+      summary: Remove member (member.manage); own id — leave the project
+      operationId: delete_api_v1_projects_project_id_members_user_id
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: Removed
+        '403':
+          description: No member.manage or the member's role is wider than own permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: No such member (member.not_found)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: The last owner cannot leave or be removed (member.last_owner)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /api/v1/projects/{project_id}/roles:
+    get:
+      tags:
+      - Members
+      summary: Roles that can be assigned in the project (project.read)
+      operationId: get_api_v1_projects_project_id_roles
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RolesList'
+        default:
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /api/v1/projects/{project_id}/invitations:
+    get:
+      tags:
+      - Invitations
+      summary: Pending invitations of the project (member.manage)
+      operationId: get_api_v1_projects_project_id_invitations
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationsList'
+        default:
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    post:
+      tags:
+      - Invitations
+      summary: Invite a registered user with a role (member.manage); a letter is sent
+      operationId: post_api_v1_projects_project_id_invitations
+      description: 'The letter is a notification: if it could not be queued, the invitation still exists and is visible
+        in the invitee''s inbox.'
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvitationCreate'
+      responses:
+        '201':
+          description: Invited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invitation'
+        '403':
+          description: No member.manage or the role is wider than own permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: Already a member (invitation.already_member) or already invited (invitation.already_pending)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: No such user (invitation.user_invalid) or role (invitation.role_invalid)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: Users service unavailable (users.unavailable); nothing created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /api/v1/projects/{project_id}/invitations/{invitation_id}:
+    delete:
+      tags:
+      - Invitations
+      summary: Revoke a pending invitation (member.manage); answered ones are not changed
+      operationId: delete_api_v1_projects_project_id_invitations_invitation_id
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: invitation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: Revoked
+        '404':
+          description: No such invitation in the project (invitation.not_found)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /api/v1/invitations:
+    get:
+      tags:
+      - Invitations
+      summary: Own pending invitations
+      operationId: get_api_v1_invitations
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationsList'
+        default:
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /api/v1/invitations/{invitation_id}/accept:
+    post:
+      tags:
+      - Invitations
+      summary: Accept own invitation and become a member; repeating is safe
+      operationId: post_api_v1_invitations_invitation_id_accept
+      parameters:
+      - name: invitation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invitation'
+        '404':
+          description: No such invitation for this user (invitation.not_found)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '410':
+          description: Revoked, declined or expired (invitation.gone)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /api/v1/invitations/{invitation_id}/decline:
+    post:
+      tags:
+      - Invitations
+      summary: Decline own invitation; repeating is safe
+      operationId: post_api_v1_invitations_invitation_id_decline
+      parameters:
+      - name: invitation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: Declined
+        '404':
+          description: No such invitation for this user (invitation.not_found)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '410':
+          description: Already accepted, revoked or expired (invitation.gone)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
   /api/v1/projects/{project_id}/environments:
     get:
       tags:
@@ -414,6 +1354,19 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
     post:
       tags:
       - Environments
@@ -476,7 +1429,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EnvironmentWrite'
+              $ref: '#/components/schemas/EnvironmentPatch'
   /api/v1/projects/{project_id}/services:
     get:
       tags:
@@ -508,11 +1461,20 @@ paths:
         required: false
         schema:
           type: string
+          format: uuid
       - name: cursor
         in: query
         required: false
         schema:
           type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
     post:
       tags:
       - Services
@@ -600,7 +1562,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ServiceWrite'
+              $ref: '#/components/schemas/ServicePatch'
   /api/v1/services/{service_id}/health:
     get:
       tags:
@@ -1914,6 +2876,123 @@ components:
       - slug
       - created_at
       additionalProperties: false
+    TokenScope:
+      type: string
+      enum:
+      - alert.ingest
+      - deployment.ingest
+    ApiToken:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        environment_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        name:
+          type: string
+        prefix:
+          type: string
+          description: Start of the secret to recognise it in the list; the secret cannot be restored from it
+        scopes:
+          type: array
+          items:
+            $ref: '#/components/schemas/TokenScope'
+        created_by:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        last_used_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        revoked_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+      required:
+      - id
+      - project_id
+      - environment_id
+      - name
+      - prefix
+      - scopes
+      - created_by
+      - created_at
+      - expires_at
+      - last_used_at
+      - revoked_at
+      additionalProperties: false
+    ApiTokenCreate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        environment_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+          description: Bind the token to one environment of the project
+        scopes:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/TokenScope'
+          description: Defaults to all scopes
+        expires_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: Must be in the future; null — no expiry
+      required:
+      - name
+      additionalProperties: false
+    ApiTokenIssued:
+      type: object
+      properties:
+        token:
+          $ref: '#/components/schemas/ApiToken'
+        secret:
+          type: string
+          description: Shown once; aiip_ followed by 43 url-safe characters
+      required:
+      - token
+      - secret
+      additionalProperties: false
+    ApiTokensPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiToken'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+      required:
+      - items
+      - next_cursor
+      additionalProperties: false
     ProjectWrite:
       type: object
       properties:
@@ -1925,8 +3004,10 @@ components:
           type: string
           minLength: 2
           maxLength: 80
+          pattern: ^[a-z0-9][a-z0-9-]*$
         description:
           type: string
+          maxLength: 2000
       required:
       - name
       - slug
@@ -1964,8 +3045,10 @@ components:
           type: string
           minLength: 1
           maxLength: 80
+          pattern: ^[a-z0-9][a-z0-9-]*$
         is_production:
           type: boolean
+          default: false
       required:
       - name
       - slug
@@ -3950,7 +5033,7 @@ components:
         masked_email:
           type: string
           maxLength: 254
-          description: Partially masked email the code was sent to; the same for registered and new emails.
+          description: Partially masked email the code was sent to.
         expires_in:
           type: integer
           minimum: 1
@@ -4024,7 +5107,424 @@ components:
       - auth.invalid_refresh_token
       - auth.refresh_token_reused
       - auth.account_not_found
+      - auth.email_taken
+      - auth.email_not_registered
+      - auth.email_unchanged
+      - events.unavailable
       - request.invalid
+    EmailChangeRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - new_email
+      properties:
+        new_email:
+          type: string
+          format: email
+          maxLength: 254
+    EmailChangeVerifyRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - challenge_id
+      - code
+      - new_code
+      properties:
+        challenge_id:
+          type: string
+          pattern: ^ch_[A-Za-z0-9_-]{20,120}$
+        code:
+          type: string
+          pattern: ^[0-9]{6}$
+          description: Code from the current email
+        new_code:
+          type: string
+          pattern: ^[0-9]{6}$
+          description: Code from the new email
+    EmailChangeChallenge:
+      type: object
+      additionalProperties: false
+      required:
+      - challenge_id
+      - masked_email
+      - masked_new_email
+      - delivery_status
+      - expires_in
+      - resend_after
+      properties:
+        challenge_id:
+          type: string
+          pattern: ^ch_[A-Za-z0-9_-]{20,120}$
+        masked_email:
+          type: string
+          maxLength: 254
+        masked_new_email:
+          type: string
+          maxLength: 254
+        delivery_status:
+          type: string
+          enum:
+          - queued
+        expires_in:
+          type: integer
+          minimum: 1
+          maximum: 300
+        resend_after:
+          type: integer
+          minimum: 0
+          maximum: 3600
+    Username:
+      type: string
+      pattern: ^[A-Za-z0-9][A-Za-z0-9-]{1,30}[A-Za-z0-9]$
+      description: 3–32 latin letters, digits and '-', not at the edges; stored and compared lowercase.
+    WorkingHours:
+      type: object
+      additionalProperties: false
+      required:
+      - starts_at
+      - ends_at
+      - days
+      properties:
+        starts_at:
+          type: string
+          format: time
+        ends_at:
+          type: string
+          format: time
+        days:
+          type: array
+          minItems: 1
+          maxItems: 7
+          uniqueItems: true
+          items:
+            type: integer
+            minimum: 1
+            maximum: 7
+      description: In the user's timezone; ISO days, 1 = Monday. ends_at before starts_at is a night shift; equal times
+        are invalid. Times are returned as HH:MM:SS.
+    UserProfile:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - username
+      - display_name
+      - email
+      - timezone
+      - working_hours
+      - avatar_url
+      - onboarded_at
+      - created_at
+      properties:
+        avatar_url:
+          type:
+          - string
+          - 'null'
+          description: Path of the avatar image with version (/api/v1/users/{id}/avatar?v=...); null — no avatar,
+            the frontend shows initials.
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        display_name:
+          type:
+          - string
+          - 'null'
+        email:
+          type: string
+          format: email
+        timezone:
+          type: string
+          description: IANA name, UTC until set
+        working_hours:
+          oneOf:
+          - $ref: '#/components/schemas/WorkingHours'
+          - type: 'null'
+        onboarded_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: null until the profile form is saved for the first time
+        created_at:
+          type: string
+          format: date-time
+    ProfileUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        username:
+          $ref: '#/components/schemas/Username'
+        display_name:
+          type:
+          - string
+          - 'null'
+          minLength: 1
+          maxLength: 120
+        timezone:
+          type: string
+          maxLength: 64
+        working_hours:
+          oneOf:
+          - $ref: '#/components/schemas/WorkingHours'
+          - type: 'null'
+    UsernameAvailability:
+      type: object
+      additionalProperties: false
+      required:
+      - username
+      - available
+      properties:
+        username:
+          type: string
+        available:
+          type: boolean
+    UsersPage:
+      type: object
+      additionalProperties: false
+      required:
+      - items
+      - next_cursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserProfile'
+        next_cursor:
+          type:
+          - string
+          - 'null'
+    UsersList:
+      type: object
+      additionalProperties: false
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserProfile'
+    Role:
+      type: object
+      additionalProperties: false
+      required:
+      - key
+      - name
+      - permissions
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+    RolesList:
+      type: object
+      additionalProperties: false
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+    Member:
+      type: object
+      additionalProperties: false
+      required:
+      - user_id
+      - role
+      - joined_at
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        role:
+          $ref: '#/components/schemas/Role'
+        joined_at:
+          type: string
+          format: date-time
+    MembersList:
+      type: object
+      additionalProperties: false
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Member'
+    MemberUpdate:
+      type: object
+      additionalProperties: false
+      required:
+      - role
+      properties:
+        role:
+          type: string
+          description: 'Role key: owner, admin, developer, viewer'
+    InvitationCreate:
+      type: object
+      additionalProperties: false
+      required:
+      - user_id
+      - role
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        role:
+          type: string
+          description: Role key
+    Invitation:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - project
+      - user_id
+      - role
+      - invited_by
+      - status
+      - created_at
+      - expires_at
+      - responded_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        project:
+          type: object
+          additionalProperties: false
+          required:
+          - id
+          - name
+          - slug
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            slug:
+              type: string
+        user_id:
+          type: string
+          format: uuid
+        role:
+          type: object
+          additionalProperties: false
+          required:
+          - key
+          - name
+          properties:
+            key:
+              type: string
+            name:
+              type: string
+        invited_by:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - pending
+          - accepted
+          - declined
+          - revoked
+          - expired
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        responded_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+    InvitationsList:
+      type: object
+      additionalProperties: false
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Invitation'
+    ProjectPatch:
+      type: object
+      additionalProperties: false
+      description: 'Partial update: fields not sent stay as they are; null is rejected.'
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        slug:
+          type: string
+          minLength: 2
+          maxLength: 80
+          pattern: ^[a-z0-9][a-z0-9-]*$
+        description:
+          type: string
+          maxLength: 2000
+    EnvironmentPatch:
+      type: object
+      additionalProperties: false
+      description: 'Partial update: fields not sent stay as they are; null is rejected.'
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        slug:
+          type: string
+          minLength: 1
+          maxLength: 80
+          pattern: ^[a-z0-9][a-z0-9-]*$
+        is_production:
+          type: boolean
+    ServicePatch:
+      type: object
+      additionalProperties: false
+      description: 'Partial update: fields not sent stay as they are; null clears repository_url and health_url and
+        is rejected for the rest.'
+      properties:
+        environment_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        external_names:
+          type: array
+          maxItems: 50
+          items:
+            type: string
+            minLength: 1
+            maxLength: 160
+        description:
+          type: string
+          maxLength: 2000
+        repository_url:
+          type:
+          - string
+          - 'null'
+          maxLength: 2048
+          pattern: ^https?://\S+$
+        health_url:
+          type:
+          - string
+          - 'null'
+          maxLength: 2048
+          pattern: ^https?://\S+$
   securitySchemes:
     CookieAuth:
       type: apiKey

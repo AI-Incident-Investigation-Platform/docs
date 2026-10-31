@@ -43,16 +43,21 @@
 
 ## 3. Авторизация Browser ↔ API
 
-Цепочка **email → одноразовый шестизначный код на почту → сессия в HttpOnly-куках**. Пароля нет, вход и регистрация — одно окно: для незарегистрированного email аккаунт создаётся при успешной проверке кода. Подробно — [AUTH_BOUNDARY.md](contracts/AUTH_BOUNDARY.md).
+Цепочка **email → одноразовый шестизначный код на почту → сессия в HttpOnly-куках**. Пароля нет; регистрация (новая почта) и вход (зарегистрированная) — разные запросы кода, аккаунт создаётся при успешной проверке кода регистрации. Подробно — [AUTH_BOUNDARY.md](contracts/AUTH_BOUNDARY.md).
 
 | Метод | Путь | Request | Response |
 |---|---|---|---|
-| POST | `/api/v1/auth/login` | `{email}` | `202 {challenge_id,masked_email,delivery_status,expires_in,resend_after}`; одинаково для известного и нового email; **кук нет** |
+| POST | `/api/v1/auth/register` | `{email}` | `202 {challenge_id,masked_email,delivery_status,expires_in,resend_after}`; почта занята — `409 auth.email_taken`; **кук нет** |
+| POST | `/api/v1/auth/login` | `{email}` | `202` как у register; почта не зарегистрирована — `404 auth.email_not_registered`; **кук нет** |
 | POST | `/api/v1/auth/otp/verify` | `{challenge_id,code}` | `200 {user:{id,email,created_at},account_created}` + `Set-Cookie` `access_token` и `refresh_token` |
 | POST | `/api/v1/auth/otp/resend` | `{challenge_id}` | `202`, новый код, предыдущий недействителен |
 | POST | `/api/v1/auth/refresh` | кука `refresh_token` | `204` + новые куки (ротация) |
 | POST | `/api/v1/auth/logout` | кука `refresh_token` | `204`, сессия отозвана, куки очищены |
 | GET | `/api/v1/auth/me` | кука `access_token` | `{id,email,created_at}` |
+| POST | `/api/v1/auth/email/change` | `{new_email}` + сессия | `202 {challenge_id,masked_email,masked_new_email,…}`; код на текущую и на новую почту |
+| POST | `/api/v1/auth/email/change/verify` | `{challenge_id,code,new_code}` + сессия | `200 {id,email,created_at}`; остальные сессии отозваны |
+
+Профиль и поиск людей — сервис `users`: `GET/PATCH /api/v1/users/me`, `PUT/DELETE /api/v1/users/me/avatar`, `GET /api/v1/users/{id}/avatar`, `GET /api/v1/users?q=`, `GET /api/v1/users/lookup?ids=`, `GET /api/v1/users/{id}`, `GET /api/v1/users/username-availability`. Регистрацию и смену почты `auth` публикует событиями `user.registered` и `user.email_changed` в RabbitMQ ([AUTH_BOUNDARY](contracts/AUTH_BOUNDARY.md#события-о-пользователях)).
 
 **Безопасность.** Токены только в HttpOnly-куках: `access_token` (JWT 15 минут, `Path=/`) и `refresh_token` (30 дней, `Path=/api/v1/auth`), обе `Secure`, `SameSite=Strict`. В тело ответа, URL, `localStorage` и JS токены не попадают, Bearer у браузера нет. Каждый изменяющий запрос любого сервиса проверяет `Origin` по allowlist (`403 security.origin_forbidden`) — это CSRF-защита, отдельного CSRF-токена нет. WebSocket аутентифицируется той же кукой `access_token` с проверкой `Origin`; WS-ticket не используется.
 
@@ -258,7 +263,7 @@ Server sends exactly the sanitized persisted `InvestigationEvent` shape from §5
 
 ## 7. Права доступа внутри проекта
 
-Глобальных ролей (Admin / Developer / Viewer) нет. Любой пользователь может зарегистрироваться и создать проект — он его owner. Owner и участники с правом `member.manage` приглашают людей и назначают им роль — набор прав внутри этого проекта. Список прав и модель — в [AUTH_BOUNDARY.md](contracts/AUTH_BOUNDARY.md#доступ-проекты-как-организации-github).
+Глобальных ролей (Admin / Developer / Viewer) нет. Любой пользователь может зарегистрироваться и создать проект — он его owner. Owner и участники с правом `member.manage` приглашают зарегистрированных пользователей и назначают им роль — набор прав внутри этого проекта; участником человек становится, приняв приглашение. Список прав и модель — в [AUTH_BOUNDARY.md](contracts/AUTH_BOUNDARY.md#доступ-проекты-как-организации-github).
 
 | Действие | Право |
 |---|---|

@@ -20,7 +20,7 @@
 | **Logs & Metrics** | Исследовать сырьё вручную | bounded query, time range, графики и deep links | P1 |
 | **Traces** | Найти медленное звено запроса | trace list, span waterfall, source links | P1 |
 | **Settings** | Управлять профилем / ролями | профиль, проект, роли, read-only budgets | P1 |
-| **Login + Email OTP** | Войти или зарегистрироваться | email → код на почту → app (одно окно, без пароля) | P0 |
+| **Login / Register + Email OTP** | Войти или зарегистрироваться | email → код на почту → app; регистрация и вход — разные экраны, без пароля; после регистрации — профиль | P0 |
 
 Наличие экрана в Figma не означает, что все его действия и backend endpoints уже реализованы.
 
